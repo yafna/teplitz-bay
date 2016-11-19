@@ -1,5 +1,6 @@
 package some.transport;
 
+import lombok.extern.slf4j.Slf4j;
 import net.tomp2p.storage.Data;
 import org.apache.commons.io.IOUtils;
 import org.junit.Assert;
@@ -11,9 +12,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ObjectOutput;
-import java.io.ObjectOutputStream;
+import java.net.ServerSocket;
 
+@Slf4j
 public class GreetingTest {
     private int portToBootstrap = 6003;
 
@@ -60,9 +61,9 @@ public class GreetingTest {
         FileOutputStream fos = new FileOutputStream(f1);
         ByteArrayInputStream bis = new ByteArrayInputStream(arr.getData());
         IOUtils.copy(bis, fos);
-        ((InputStream) stream1.getObject()).close();
+//        ((InputStream) stream1.getObject()).close();
         fos.close();
 
-        Assert.assertEquals(dto.getData(), arr.getData());
+        Assert.assertArrayEquals(dto.getData(), arr.getData());
     }
 }
