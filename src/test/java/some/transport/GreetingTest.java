@@ -1,5 +1,6 @@
 package some.transport;
 
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import net.tomp2p.storage.Data;
 import org.apache.commons.io.IOUtils;
@@ -16,22 +17,18 @@ import java.net.ServerSocket;
 
 @Slf4j
 public class GreetingTest {
-    private int portToBootstrap = 6003;
-
-    private int clentPort1 = 6001;
-    private int clentPort2 = 6002;
-    private int serverPort = 6003;
+    private final static String ip = "192.168.1.1";
     private String serverName = "testserver";
-    private String ip = "192.168.1.1";
 
     // Locate server by name
     @Test
     public void greeting() throws IOException, ClassNotFoundException {
-        Server server = new Server(portToBootstrap, serverPort);
+        int serverPort = randomPort();
+        Server server = new Server(serverPort, serverPort);
         server.store(serverName, ip);
 
-        Server client1 = new Server(portToBootstrap, clentPort1);
-        Server client2 = new Server(portToBootstrap, clentPort2);
+        Server client1 = new Server(serverPort, randomPort());
+        Server client2 = new Server(serverPort, randomPort());
 
         Assert.assertEquals(ip, client1.get(serverName));
         Assert.assertEquals(ip, client2.get(serverName));
@@ -39,6 +36,7 @@ public class GreetingTest {
 
     @Test
     public void send() throws IOException, ClassNotFoundException {
+        int serverPort = randomPort();
         ImgDTO dto = new ImgDTO();
         dto.setName("2.jpg");
         InputStream stream = getClass().getResourceAsStream("/1.jpg");
@@ -49,11 +47,10 @@ public class GreetingTest {
         bos.close();
 
         Data data = new Data(dto);
-        Server server = new Server(portToBootstrap, serverPort);
+        Server server = new Server(serverPort, serverPort);
         server.store(serverName, data);
 
-
-        Server client1 = new Server(portToBootstrap, clentPort1);
+        Server client1 = new Server(serverPort, randomPort());
 
         Data stream1 = client1.getData(serverName);
         File f1 = new File("new1.jpg");
@@ -61,9 +58,19 @@ public class GreetingTest {
         FileOutputStream fos = new FileOutputStream(f1);
         ByteArrayInputStream bis = new ByteArrayInputStream(arr.getData());
         IOUtils.copy(bis, fos);
-//        ((InputStream) stream1.getObject()).close();
         fos.close();
 
         Assert.assertArrayEquals(dto.getData(), arr.getData());
     }
+
+    @SneakyThrows
+    private static int randomPort() {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            socket.setReuseAddress(true);
+            int port = socket.getLocalPort();
+            log.info("Aquired random port: {}", port);
+            return port;
+        }
+    }
+
 }
