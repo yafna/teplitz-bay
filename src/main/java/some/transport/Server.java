@@ -1,5 +1,6 @@
 package some.transport;
 
+import net.tomp2p.futures.BaseFutureAdapter;
 import net.tomp2p.futures.FutureBootstrap;
 import net.tomp2p.futures.FutureDHT;
 import net.tomp2p.p2p.Peer;
@@ -43,6 +44,10 @@ public class Server {
             return futureDHT.getData();
         }
         return null;
+    }
+
+    public FutureDHT getFutureDHT(String name) throws IOException, ClassNotFoundException {
+        return peer.get(Number160.createHash(name)).start();
     }
 
     public void store(String name, Data data) throws IOException {
