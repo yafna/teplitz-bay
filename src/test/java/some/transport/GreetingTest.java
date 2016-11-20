@@ -1,86 +1,62 @@
 package some.transport;
 
-import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
-import net.tomp2p.futures.BaseFutureAdapter;
-import net.tomp2p.futures.FutureDHT;
-import net.tomp2p.storage.Data;
-import org.apache.commons.io.IOUtils;
+import net.i2p.router.Router;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.ServerSocket;
+import java.util.Properties;
 
-@Slf4j
 public class GreetingTest {
-    private final static String ip = "192.168.1.1";
-    private String serverName = "testserver";
+    private static Router r;
 
-    @Test
-    public void greeting() throws IOException, ClassNotFoundException {
-        int serverPort = randomPort();
-        Server server = new Server(serverPort, serverPort);
-        server.store(serverName, ip);
+    @BeforeClass
+    public static void setUp() {
+        Properties p = new Properties();
+        // add your configuration settings, directories, etc.
+        // where to find the I2P installation files
+        p.put("i2p'.dir.base", "~/tmp");
+        // where to find the I2P data files
+        p.put("i2p.dir.config", "~/tmp");
+        // bandwidth limits in K bytes per second
+        p.put("i2np.inboundKBytesPerSecond", "50");
+        p.put("i2np.outboundKBytesPerSecond", "50");
+        p.put("router.sharePercentage", "80");
+        p.put("foo", "bar");
+        r = new Router(p);
+        // don't call exit() when the router stops
+        r.setKillVMOnEnd(true);
 
-        Server client1 = new Server(serverPort, randomPort());
-        Server client2 = new Server(serverPort, randomPort());
-
-        Assert.assertEquals(ip, client1.get(serverName));
-        Assert.assertEquals(ip, client2.get(serverName));
-    }
-
-    @Test
-    public void nonBlockingReading() throws IOException, ClassNotFoundException {
-        int serverPort = randomPort();
-        Server server = new Server(serverPort, serverPort);
-        server.store(serverName, ip);
-
-        Server client1 = new Server(serverPort, randomPort());
-        client1.getFutureDHT(serverName).addListener(new BaseFutureAdapter<FutureDHT>() {
-            @Override
-            public void operationComplete(FutureDHT future) throws Exception
-            {
-                if(future.isSuccess()) {
-                    String response = future.getData().getObject().toString();
-                    Assert.assertEquals(ip, response);
-                }
-            }
-        });
-    }
-
-    @Test
-    public void send() throws IOException, ClassNotFoundException {
-        int serverPort = randomPort();
-        ImgDTO dto = new ImgDTO();
-        dto.setName("2.jpg");
-        InputStream stream = getClass().getResourceAsStream("/1.jpg");
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        IOUtils.copy(stream, bos);
-        dto.setData(bos.toByteArray());
-        stream.close();
-        bos.close();
-
-        Data data = new Data(dto);
-        Server server = new Server(serverPort, serverPort);
-        server.store(serverName, data);
-
-        Server client1 = new Server(serverPort, randomPort());
-        Data aquredData = client1.getData(serverName);
-        ImgDTO imgArray = (ImgDTO) aquredData.getObject();
-        Assert.assertArrayEquals(dto.getData(), imgArray.getData());
-    }
-
-    @SneakyThrows
-    private static int randomPort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            socket.setReuseAddress(true);
-            int port = socket.getLocalPort();
-            log.info("Aquired random port: {}", port);
-            return port;
+        r.runRouter();
+//
+        System.out.println("p = " + p);
+        try {
+            Thread.sleep(3000);
+            System.out.println("sleeps end ");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
     }
 
+    @AfterClass
+    public static void tearDown() {
+        r.shutdown(0);
+    }
+
+    @Test
+    public void test() throws IOException, ClassNotFoundException {
+        System.out.println("test start");
+        Server server = new Server();
+        String sname = server.start();
+        System.out.println("sname = " + sname);
+        Client client = new Client();
+        client.start(sname);
+        System.out.println("client start");
+        String s = "TESTTEST";
+        String echoS = client.sendEcho(s);
+        System.out.println("assert");
+        Assert.assertEquals(s, echoS);
+    }
 }
