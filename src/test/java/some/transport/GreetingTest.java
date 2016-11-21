@@ -28,13 +28,9 @@ public class GreetingTest {
         r = new Router(p);
         // don't call exit() when the router stops
         r.setKillVMOnEnd(true);
-
         r.runRouter();
-//
-        System.out.println("p = " + p);
         try {
             Thread.sleep(3000);
-            System.out.println("sleeps end ");
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -47,16 +43,12 @@ public class GreetingTest {
 
     @Test
     public void test() throws IOException, ClassNotFoundException {
-        System.out.println("test start");
         Server server = new Server();
-        String sname = server.start();
-        System.out.println("sname = " + sname);
-        Client client = new Client();
-        client.start(sname);
-        System.out.println("client start");
+        String sname = server.getMyDestination();
+        Server client = new Server();
+        client.connectTo(sname);
         String s = "TESTTEST";
-        String echoS = client.sendEcho(s);
-        System.out.println("assert");
+        String echoS = client.sendEcho(sname, s);
         Assert.assertEquals(s, echoS);
     }
 }
