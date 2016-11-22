@@ -1,2 +1,4 @@
 rootProject.name = 'teplitz-bay'
+include 'tbrouter'
+include 'tbserver'
 

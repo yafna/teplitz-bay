@@ -77,8 +77,8 @@ public class Server {
     public String sendEcho(String destinationAddr, String echoStr){
         I2PSocket socket = connections.get(destinationAddr);
         if(socket == null){
-            connectTo(destinationAddr);
-            socket = connections.get(destinationAddr);
+            log.error("Send echo failed to " + destinationAddr);
+            return null;
         }
         try {
             //Write to server

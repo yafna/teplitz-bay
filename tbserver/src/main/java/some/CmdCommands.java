@@ -1,24 +1,20 @@
-package some.transport;
+package some;
 
 import lombok.Getter;
 
 public enum CmdCommands {
-    EXIT("exit", 0),
-    GET_MY_DESTINATION("mydestination", 0),
-    CONNECT("connect", 1),
-    DISCONNECT("disconnect", 1),
-    SEND_ECHO("echo", 2),
-    RUN_ROUTER("runrouter", 0),
-    HELP("help", 0);
+    EXIT("exit"),
+    GET_MY_DESTINATION("mydestination"),
+    CONNECT("connect"),
+    DISCONNECT("disconnect"),
+    SEND_ECHO("echo"),
+    HELP("help");
 
-    @Getter
-    private int argsNum;
     @Getter
     private String displayName;
 
-    CmdCommands(String displayName,int argsNum) {
+    CmdCommands(String displayName) {
         this.displayName = displayName;
-        this.argsNum = argsNum;
     }
 
     public static CmdCommands getByName(String name) {
@@ -33,11 +29,7 @@ public enum CmdCommands {
     public static String listCommands() {
         StringBuilder sb = new StringBuilder();
         for (CmdCommands c : values()) {
-            sb.append(c.displayName);
-            for(int i = 0; i < c.argsNum; ++i) {
-                sb.append(" <parameter>");
-            }
-            sb.append("\n");
+            sb.append(c.displayName).append("\n");
         }
         return sb.toString();
     }
