@@ -1,5 +1,6 @@
 package some.transport;
 
+import net.i2p.client.streaming.I2PSocketManagerFactory;
 import net.i2p.router.Router;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -14,31 +15,34 @@ public class GreetingTest {
 
     @BeforeClass
     public static void setUp() {
-        Properties p = new Properties();
-        // add your configuration settings, directories, etc.
-        // where to find the I2P installation files
-        p.put("i2p'.dir.base", "~/tmp");
-        // where to find the I2P data files
-        p.put("i2p.dir.config", "~/tmp");
-        // bandwidth limits in K bytes per second
-        p.put("i2np.inboundKBytesPerSecond", "50");
-        p.put("i2np.outboundKBytesPerSecond", "50");
-        p.put("router.sharePercentage", "80");
-        p.put("foo", "bar");
-        r = new Router(p);
-        // don't call exit() when the router stops
-        r.setKillVMOnEnd(true);
-        r.runRouter();
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        if (null == I2PSocketManagerFactory.createManager()) {
+
+            Properties p = new Properties();
+            // add your configuration settings, directories, etc.
+            // where to find the I2P installation files
+            p.put("i2p'.dir.base", "~/tmp");
+            // where to find the I2P data files
+            p.put("i2p.dir.config", "~/tmp");
+            // bandwidth limits in K bytes per second
+            p.put("i2np.inboundKBytesPerSecond", "50");
+            p.put("i2np.outboundKBytesPerSecond", "50");
+            p.put("router.sharePercentage", "80");
+            p.put("foo", "bar");
+            r = new Router(p);
+            // don't call exit() when the router stops
+            r.setKillVMOnEnd(true);
+            r.runRouter();
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 
     @AfterClass
     public static void tearDown() {
-        r.shutdown(0);
+        if (r != null) r.shutdown(0);
     }
 
     @Test
