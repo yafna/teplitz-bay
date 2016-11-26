@@ -1,0 +1,55 @@
+group 'com.github.yafna'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'java'
+apply plugin: 'groovy'
+
+repositories {
+    mavenCentral()
+}
+
+def spring = { [group: "org.springframework", name: it, version: "4.3.3.RELEASE"] }
+def spock = { [group: "org.spockframework", name: it, version: "1.0-groovy-2.4"] }
+
+dependencies {
+    compile "org.slf4j:slf4j-api:1.7.12"
+
+    compile "commons-io:commons-io:2.5"
+    compile 'net.i2p:router:0.9.27'
+    compile group: 'org.projectlombok', name: 'lombok', version: '1.16.10'
+    compile group: 'com.fatboyindustrial.gson-javatime-serialisers', name: 'gson-javatime-serialisers', version: '1.1.1'
+
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+    testCompile group: 'org.skyscreamer', name: 'jsonassert', version: '1.4.0'
+    testCompile group: 'uk.co.datumedge', name: 'hamcrest-json', version: '0.1'
+
+    // TODO removing this causes test error, investigate
+    compile "javax.validation:validation-api:1.1.0.Final"
+    compile "com.google.guava:guava:18.0"
+    compile "com.google.code.gson:gson:2.7"
+
+    testCompile spring("spring-aop")
+    testCompile spring("spring-aspects")
+    testCompile spring("spring-beans")
+    testCompile spring("spring-context-support")
+    testCompile spring("spring-context")
+    testCompile spring("spring-core")
+    testCompile spring("spring-jdbc")
+    testCompile spring("spring-orm")
+    testCompile spring("spring-tx")
+
+    // Spring test support
+    testCompile spring("spring-test")
+
+    // Spock
+    testCompile("org.codehaus.groovy:groovy-all:2.4.7") { force = true }
+    testCompile spock("spock-core")
+    testRuntime spock("spock-spring")
+    testRuntime "org.objenesis:objenesis:2.4"   // Required for Spock to mock classes that don't have zero-args constructor
+    testRuntime "cglib:cglib-nodep:3.2.4"
+
+    // Logging
+    testRuntime "org.slf4j:slf4j-simple:1.7.12"
+}
+
+sourceSets.test.groovy.srcDirs += ["src/main/java"]
