@@ -15,7 +15,6 @@ dependencies {
     compile "org.slf4j:slf4j-api:1.7.12"
 
     compile "commons-io:commons-io:2.5"
-    compile 'net.i2p:router:0.9.27'
     compile group: 'org.projectlombok', name: 'lombok', version: '1.16.10'
     compile group: 'com.fatboyindustrial.gson-javatime-serialisers', name: 'gson-javatime-serialisers', version: '1.1.1'
 
@@ -23,8 +22,6 @@ dependencies {
     testCompile group: 'org.skyscreamer', name: 'jsonassert', version: '1.4.0'
     testCompile group: 'uk.co.datumedge', name: 'hamcrest-json', version: '0.1'
 
-    // TODO removing this causes test error, investigate
-    compile "javax.validation:validation-api:1.1.0.Final"
     compile "com.google.guava:guava:18.0"
     compile "com.google.code.gson:gson:2.7"
 
