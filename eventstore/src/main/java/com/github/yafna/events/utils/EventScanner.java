@@ -12,8 +12,11 @@ import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -27,15 +30,31 @@ public class EventScanner {
 
     public static <T> MapDomainHandlerRegistry<T> handlers(Class<T> clazz) {
         Method[] methods = clazz.getMethods();
-
         return new MapDomainHandlerRegistry<>(withAnnotation(
                 Stream.of(methods), Handler.class
         ).<SimpleEntry<String, DomainHandler<T, ?>>>flatMap(
                 EventScanner::toHandlers
         ).collect(Collectors.groupingBy(
-                Entry::getKey, Collectors.mapping(Entry::getValue, Collectors.toList())
+                Entry::getKey, Collectors.mapping(Entry::getValue, getDomainHandlerListCollector("two handlers to one Event Type are not allowed"))
         )));
     }
+
+    private static <T> Collector<T, ?, List<T>> getDomainHandlerListCollector(String errorMsg) {
+        return Collector.of(ArrayList::new, (list, item) -> {
+            if (!list.isEmpty()) {
+                throw new IllegalArgumentException(errorMsg);
+            }
+            list.add(item);
+        }, (listR, listL) -> {
+            if (listL.isEmpty()) {
+                return listR;
+            } else if (listR.isEmpty()) {
+                return listL;
+            }
+            throw new IllegalArgumentException(errorMsg);
+        }, Collector.Characteristics.IDENTITY_FINISH);
+    }
+
 
     private static <T> Stream<SimpleEntry<String, DomainHandler<T, ?>>> toHandlers(Entry<Handler, Method> entry) {
         Method method = entry.getValue();
