@@ -24,6 +24,12 @@ public class Rabbit implements Aggregate {
     private String publicKey;
     private AtomicLong lastEvent = new AtomicLong(-1);
 
+    @Handler(value = "init")
+    public void create(Event meta) {
+        born = meta.getStored();
+        log.info("On [{}] rabbit [{}] was born, named [{}]", born, id, name);
+    }
+
     @Handler
     public void create(Event meta, RabbitAdded data) {
         born = meta.getStored();
