@@ -14,6 +14,8 @@ import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.text.ParseException;
 import java.time.Clock;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,6 +35,7 @@ public class FileEventStore implements EventStore {
     private static final String PATTERN_SEQ = "{0,number,00000000}";
     private static final String NAME_PATTERN_SEQ = PATTERN_SEQ + "={1}={2}.evt";
     private static final Collector<Path, ?, Optional<Path>> TO_LAST = Collectors.maxBy(Comparator.comparing(Path::toString));
+    private static final DateTimeFormatter datetimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd--HH-mm-ss").withZone(ZoneId.systemDefault());
 
     private Clock clock;
     private File rootDir;
@@ -116,7 +119,7 @@ public class FileEventStore implements EventStore {
             event.setSeq(seq);
             return MessageFormat.format(NAME_PATTERN_SEQ, seq, event.getId(), event.getType());
         }).orElseGet(() -> MessageFormat.format(
-                NAME_PATTERN_TIME, String.valueOf(event.getStored()), event.getId(), event.getType()
+                NAME_PATTERN_TIME, datetimeFormatter.format(event.getStored()), event.getId(), event.getType()
         ));
         Path file = new File(path, name).toPath();
         log.info("Writing:\n    {}", file.toString());
