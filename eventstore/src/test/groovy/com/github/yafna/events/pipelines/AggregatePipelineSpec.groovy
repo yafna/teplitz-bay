@@ -1,14 +1,13 @@
 package com.github.yafna.events.pipelines
 
 import com.github.yafna.events.Event
+import com.github.yafna.events.aggregate.EventScanner
 import com.github.yafna.events.handlers.DomainHandlerRegistry
 import com.github.yafna.events.rabbits.Rabbit
 import com.github.yafna.events.rabbits.RabbitAdded
 import com.github.yafna.events.rabbits.RabbitInit
 import com.github.yafna.events.rabbits.RabbitNameUpdated
 import com.github.yafna.events.store.file.GsonFileEventStore
-import com.github.yafna.events.utils.EventScanner
-import com.github.yafna.events.woodpecker.Woodpecker
 import spock.lang.Specification
 
 import java.time.Clock
@@ -71,19 +70,4 @@ class AggregatePipelineSpec extends Specification {
             kirk.publicKey == null
     }
 
-    def "double handler definition"() {
-        when:
-            EventScanner.handlers(Woodpecker)
-        then:
-            def ex = thrown(IllegalArgumentException)
-            ex.message == 'two handlers to one Event Type are not allowed'
-    }
-
-    def "double domain event definition"() {
-        when:
-            EventScanner.events(Woodpecker)
-        then:
-            def ex = thrown(IllegalStateException)
-            ex.message == 'Duplicate key class com.github.yafna.events.woodpecker.WoodpeckerAction'
-    }
 }
