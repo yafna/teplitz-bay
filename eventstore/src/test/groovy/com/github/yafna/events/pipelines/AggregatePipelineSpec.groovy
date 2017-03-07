@@ -71,11 +71,19 @@ class AggregatePipelineSpec extends Specification {
             kirk.publicKey == null
     }
 
-    def "double definition"() {
+    def "double handler definition"() {
         when:
             EventScanner.handlers(Woodpecker)
         then:
             def ex = thrown(IllegalArgumentException)
             ex.message == 'two handlers to one Event Type are not allowed'
+    }
+
+    def "double domain event definition"() {
+        when:
+            EventScanner.events(Woodpecker)
+        then:
+            def ex = thrown(IllegalStateException)
+            ex.message == 'Duplicate key class com.github.yafna.events.woodpecker.WoodpeckerAction'
     }
 }

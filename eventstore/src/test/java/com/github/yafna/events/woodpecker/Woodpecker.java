@@ -26,4 +26,8 @@ public class Woodpecker implements Aggregate {
     @Handler
     public void action2(Event meta, WoodpeckerRemoved data) {
     }
+
+    @Handler
+    public void dublicateDomainEvent(Event meta, WoodpeckerAction data) {
+    }
 }
