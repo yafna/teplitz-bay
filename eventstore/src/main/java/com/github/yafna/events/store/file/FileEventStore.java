@@ -14,9 +14,9 @@ import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.text.ParseException;
 import java.time.Clock;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
+import java.time.Instant;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -35,9 +35,8 @@ public class FileEventStore implements EventStore {
     private static final String PATTERN_SEQ = "{0,number,00000000}";
     private static final String NAME_PATTERN_SEQ = PATTERN_SEQ + "={1}={2}.evt";
     private static final Collector<Path, ?, Optional<Path>> TO_LAST = Collectors.maxBy(Comparator.comparing(Path::toString));
-    private static final DateTimeFormatter datetimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd--HH-mm-ss").withZone(ZoneId.systemDefault());
 
-    private Clock clock;
+    protected Clock clock;
     private File rootDir;
     private Function<StoredEvent, byte[]> serializer;
     private Function<byte[], StoredEvent> deserializer;
@@ -48,16 +47,19 @@ public class FileEventStore implements EventStore {
      * @param origin Aggregate type
      * @param aggregateId aggregate id
      * @param fromSeq event sequence number after which events should be returned
-     * @return
      */
     @Override
     public Stream<Event> getEvents(String origin, String aggregateId, Long fromSeq) {
         Predicate<Path> filter = Optional.ofNullable(fromSeq).map(FileEventStore::isAfter).orElse(f -> true);
-        return exists(
-                getDirectory(origin, Optional.ofNullable(aggregateId))
-        ).map(
+        Path path = getDirectory(origin, Optional.ofNullable(aggregateId));
+        return exists(path).map(
                 p -> readEvents(p, filter).sequential()
         ).orElseGet(Stream::empty);
+    }
+
+    @Override
+    public List<Event> subscribe(String origin, String type, Instant since, Consumer<Event> callback) {
+        throw new UnsupportedOperationException();
     }
 
     @SneakyThrows(IOException.class)
@@ -119,7 +121,7 @@ public class FileEventStore implements EventStore {
             event.setSeq(seq);
             return MessageFormat.format(NAME_PATTERN_SEQ, seq, event.getId(), event.getType());
         }).orElseGet(() -> MessageFormat.format(
-                NAME_PATTERN_TIME, datetimeFormatter.format(event.getStored()), event.getId(), event.getType()
+                NAME_PATTERN_TIME, formatTime(event.getStored()), event.getId(), event.getType()
         ));
         Path file = path.resolve(name);
         log.info("Writing:\n    {}", file.toString());
@@ -132,8 +134,12 @@ public class FileEventStore implements EventStore {
     }
 
     private Path getDirectory(String dir, Optional<String> aggregateId) {
-        Path aggregateDir = new File(rootDir, dir).toPath();
+        Path aggregateDir = path(dir);
         return aggregateId.map(aggregateDir::resolve).orElse(aggregateDir);
+    }
+
+    private Path path(String dir) {
+        return new File(rootDir, dir).toPath();
     }
 
     private static Optional<Path> lastEvent(Path dir) {
@@ -195,6 +201,10 @@ public class FileEventStore implements EventStore {
 
     private static Persister fn(Persister create) {
         return create;
+    }
+
+    private static String formatTime(Instant stored) {
+        return String.valueOf(stored).replace(":", "-");
     }
 
 }
