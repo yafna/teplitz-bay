@@ -41,7 +41,8 @@ public class AggregatePipeline<A extends Aggregate> {
     public AggregatePipeline(
             Class<A> clazz,
             EventStore store,
-            Map<String, Class<?>> eventTypes, DomainHandlerRegistry<A> handlers,
+            Map<String, Class<?>> eventTypes,
+            DomainHandlerRegistry<A> handlers,
             Function<String, A> constructor
     ) {
         origin = clazz.getAnnotation(Origin.class).value();
@@ -52,12 +53,10 @@ public class AggregatePipeline<A extends Aggregate> {
     }
 
 
-    @SuppressWarnings("unused")
     public <T> Event push(String aggregateId, T event) {
         return store(event, aggregateId);
     }
 
-    @SuppressWarnings("unused")
     public A get(String id) {
         A aggregate = objects.computeIfAbsent(id, constructor);
         AtomicLong last = aggregate.getLastEvent();
