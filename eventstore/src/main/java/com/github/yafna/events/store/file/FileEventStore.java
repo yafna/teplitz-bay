@@ -30,7 +30,7 @@ import java.util.stream.Stream;
 @AllArgsConstructor
 public class FileEventStore implements EventStore {
     private static final Comparator<Path> BY_NAME = Comparator.comparing(Path::toString);
-    private static final String GLOBAL = "0000-global";
+    private static final Predicate<Path> NOT_DIRECTORY = path -> !Files.isDirectory(path);
     private static final String NAME_PATTERN_TIME = "{0}={1}={2}.evt";
     private static final String PATTERN_SEQ = "{0,number,00000000}";
     private static final String NAME_PATTERN_SEQ = PATTERN_SEQ + "={1}={2}.evt";
@@ -43,25 +43,26 @@ public class FileEventStore implements EventStore {
     private Function<byte[], StoredEvent> deserializer;
 
     /**
-     * TODO Javadoc
-     * @param origin
-     * @param aggregateId
+     * Retrieves events for a given aggragate.
+     *
+     * @param origin Aggregate type
+     * @param aggregateId aggregate id
      * @param fromSeq event sequence number after which events should be returned
      * @return
      */
     @Override
     public Stream<Event> getEvents(String origin, String aggregateId, Long fromSeq) {
         Predicate<Path> filter = Optional.ofNullable(fromSeq).map(FileEventStore::isAfter).orElse(f -> true);
-        File path = getDirectory(rootDir, origin, aggregateId, false);
-        return Optional.ofNullable(path).map(
+        return exists(
+                getDirectory(origin, Optional.ofNullable(aggregateId))
+        ).map(
                 p -> readEvents(p, filter).sequential()
         ).orElseGet(Stream::empty);
     }
 
     @SneakyThrows(IOException.class)
-    private Stream<Event> readEvents(File subdir, Predicate<Path> filter) {
-        Stream<Path> files = Files.list(subdir.toPath());
-        return files.filter(filter).sorted(BY_NAME).map(this::readEvent);
+    private Stream<Event> readEvents(Path subdir, Predicate<Path> filter) {
+        return Files.list(subdir).filter(NOT_DIRECTORY).filter(filter).sorted(BY_NAME).map(this::readEvent);
     }
 
     @SneakyThrows(IOException.class)
@@ -108,20 +109,19 @@ public class FileEventStore implements EventStore {
     }
 
     private StoredEvent write(StoredEvent event) {
-        String dir = Optional.ofNullable(event.getOrigin()).orElse(GLOBAL);
-        String subdir = Optional.ofNullable(event.getAggregateId()).orElse(GLOBAL);
-        File path = getDirectory(rootDir, dir, subdir, true);
+        String dir = event.getOrigin();
+        Optional<String> aggregateId = Optional.ofNullable(event.getAggregateId());
+        Path directory = getDirectory(dir, aggregateId);
+        Path path = exists(directory).orElseGet(() -> mkDirs(directory));
 
-        String name = Optional.ofNullable(event.getAggregateId()).map(aid -> {
-            Long seq = lastEvent(path.toPath()).map(
-                    this::getSeqFromFileEvent
-            ).orElse(0L);
+        String name = aggregateId.map(aid -> {
+            Long seq = lastEvent(path).map(this::getSeqFromFileEvent).orElse(0L);
             event.setSeq(seq);
             return MessageFormat.format(NAME_PATTERN_SEQ, seq, event.getId(), event.getType());
         }).orElseGet(() -> MessageFormat.format(
                 NAME_PATTERN_TIME, datetimeFormatter.format(event.getStored()), event.getId(), event.getType()
         ));
-        Path file = new File(path, name).toPath();
+        Path file = path.resolve(name);
         log.info("Writing:\n    {}", file.toString());
         try {
             Files.write(file, serializer.apply(event));
@@ -129,6 +129,11 @@ public class FileEventStore implements EventStore {
         } catch (IOException e) {
             throw new IllegalStateException("Unable to write [" + String.valueOf(file) + "]");
         }
+    }
+
+    private Path getDirectory(String dir, Optional<String> aggregateId) {
+        Path aggregateDir = new File(rootDir, dir).toPath();
+        return aggregateId.map(aggregateDir::resolve).orElse(aggregateDir);
     }
 
     private static Optional<Path> lastEvent(Path dir) {
@@ -145,7 +150,7 @@ public class FileEventStore implements EventStore {
             Object[] parsed = new MessageFormat(NAME_PATTERN_SEQ).parse(name);
             return ((Number) parsed[0]).longValue() + 1;
         } catch (ParseException e) {
-            throw new IllegalArgumentException(name);
+            throw new IllegalArgumentException("Error parsing file path: " + name, e);
         }
     }
 
@@ -153,24 +158,23 @@ public class FileEventStore implements EventStore {
         return UUID.randomUUID().toString();
     }
 
-    private static File getDirectory(File rootDir, String dir, String subdir, boolean create) {
-        File path = new File(new File(rootDir, dir), subdir);
-        if (path.exists()) {
-            if (path.isDirectory()) {
-                return path;
+    private static Optional<Path> exists(Path path) {
+        if (Files.exists(path)) {
+            if (Files.isDirectory(path)) {
+                return Optional.of(path);
             } else {
                 throw new IllegalStateException("Must be a directory: [" + String.valueOf(path) + "]");
             }
         } else {
-            return create ? mkDirs(path) : null;
+            return Optional.empty();
         }
     }
 
-    private static File mkDirs(File path) {
-        if (path.mkdirs()) {
-            return path;
-        } else {
-            throw new IllegalStateException("Unable to create dir: [" + String.valueOf(path) + "]");
+    private static Path mkDirs(Path path) {
+        try {
+            return Files.createDirectories(path);
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to create dir: [" + String.valueOf(path) + "]", e);
         }
     }
 

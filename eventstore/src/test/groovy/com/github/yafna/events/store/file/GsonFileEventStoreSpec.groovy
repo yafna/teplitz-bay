@@ -16,10 +16,10 @@ import java.time.Instant
 import java.time.ZoneId
 
 public class GsonFileEventStoreSpec extends Specification {
+    private final static String origin = "hedgehog"
 
     File root = File.createTempDir()
     String now = "2002-05-19T22:33:11Z"
-    String origin = "hedgehog"
 
     Clock clock = Clock.fixed(Instant.parse(now), ZoneId.of("UTC"))
     GsonFileEventStore subj = new GsonFileEventStore(clock, root)
@@ -31,8 +31,8 @@ public class GsonFileEventStoreSpec extends Specification {
             String origin = "hedgehog"
         when:
             Event event = method(subj).apply(origin, type, "12345")
-            Path path = Paths.get(root.getPath(), origin, subdir)
-            List<String> body = Files.list(path).collect(readFile)
+            Path path = Paths.get(root.getPath(), subdir)
+            List<String> body = Files.list(path).filter({ !Files.isDirectory(it) }).collect(readFile)
         then:
             event.id != null
             XJson.parse(body[0]).matches(data)
@@ -42,9 +42,9 @@ public class GsonFileEventStoreSpec extends Specification {
                     "payload": "12345"
             ])
         where:
-            type          | method                     | subdir                | data
-            "war.started" | { it.persist() }           | FileEventStore.GLOBAL | ["type": "war.started"]
-            "created"     | { it.persist("43a0f882") } | "43a0f882"            | ["type": "created", "aggregateId": "43a0f882"]
+            aggregate  | type          | method                     | subdir             | data
+            null       | "war.started" | { it.persist() }           | origin             | ["type": "war.started"]
+            "43a0f882" | "created"     | { it.persist("43a0f882") } | "$origin/43a0f882" | ["type": "created", "aggregateId": "43a0f882"]
 
     }
 
@@ -81,8 +81,25 @@ public class GsonFileEventStoreSpec extends Specification {
             getEvents(0) == [
                     [origin, aggregateId, 1, event2.id, type, instant]
             ]
-
     }
 
+    def "given multiple events should persist and read them stream"() {
+        given:
+            def getEvents = { String aggregateId -> subj.getEvents(origin, aggregateId, null).collect({
+                [it.origin, it.aggregateId, it.id, it.type]
+            })}
+        when:
+            Event global = subj.persist().apply(origin, "global", "12345")
+            Event one = subj.persist("111").apply(origin, "local", "111-123")
+            Event two = subj.persist("222").apply(origin, "local", "222-123")
+        then:
+            getEvents(null) == [[origin, null, global.id, "global"]]
+            getEvents("111") == [[origin, "111", one.id, "local"]]
+            getEvents("222") == [[origin, "222", two.id, "local"]]
+    }
+
+
     private static readFile = { Path it -> new String(Files.readAllBytes(it), StandardCharsets.UTF_8) }
+
+
 }
