@@ -15,7 +15,6 @@ import java.text.MessageFormat;
 import java.text.ParseException;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -45,9 +44,9 @@ public class FileEventStore implements EventStore {
     /**
      * Retrieves events for a given aggregate.
      *
-     * @param origin      Aggregate type
+     * @param origin Aggregate type
      * @param aggregateId aggregate id
-     * @param fromSeq     event sequence number after which events should be returned
+     * @param fromSeq event sequence number after which events should be returned
      */
     @Override
     public Stream<Event> getEvents(String origin, String aggregateId, Long fromSeq) {
@@ -61,13 +60,11 @@ public class FileEventStore implements EventStore {
     @Override
     @SneakyThrows(IOException.class)
     public List<Event> subscribe(String origin, String type, Instant since, Consumer<Event> callback) {
-        Predicate<Path> filter = path -> !path.toFile().isDirectory() && readEvent(path).getStored().isAfter(since);
-        List<Path> collectedPaths = Files.walk(path(origin)).filter(filter).collect(Collectors.toList());
-        List<Event> e = collectedPaths.stream().map(this::readEvent).filter(event -> event.getType().equals(type)).collect(Collectors.toList());
-        e.sort((o1, o2) -> o1.getStored().isAfter(o2.getStored()) ? 1 : -1);
-        List<Event> result = new ArrayList<>();
-        result.add(e.get(0));
-        return result;
+        return Files.walk(path(origin)).filter(NOT_DIRECTORY).map(this::readEvent).filter(
+                event -> event.getStored().isAfter(since) && event.getType().equals(type)
+        ).sorted(
+                Comparator.comparing(Event::getStored)
+        ).limit(1).collect(Collectors.toList());
     }
 
     @SneakyThrows(IOException.class)
