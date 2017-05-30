@@ -1,6 +1,7 @@
 package com.github.yafna.events.store.file
 
 import com.github.yafna.events.Event
+import com.github.yafna.events.TestClock
 import com.github.yafna.events.XJson
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -11,7 +12,10 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 public class GsonFileEventStoreSpec extends Specification {
     private final static String origin = "hedgehog"
@@ -20,7 +24,7 @@ public class GsonFileEventStoreSpec extends Specification {
     String now = "2002-05-19T22:33:11Z"
 
     Clock clock = Clock.fixed(Instant.parse(now), ZoneId.of("UTC"))
-    FileEventStore subj = new GsonFileEventStore(clock, root)
+    FileEventStore subj = new GsonFileEventStore(clock, root, 3)
 
     @Unroll
     def "given event [#type] should persist it under [#subdir]"() {
@@ -102,40 +106,48 @@ public class GsonFileEventStoreSpec extends Specification {
 
 
     @Unroll
-    def "given since = [#since] subscribe() should return #expected"() {
+    def "given recap window [#window], subscribe(#since) should return #expected"() {
         given:
-            Closure<Clock> setTime = { String date, String time ->
-                subj.clock = Clock.fixed(instant(date, time), ZoneId.of("UTC"))
-            }
+            def date = "2002-06-01"
+            TestClock clock = TestClock.of(date, "05:30")
+            FileEventStore subj = new GsonFileEventStore(clock, root, window)
             Closure<Event> persist = { String time, String aggregateId, String type ->
-                setTime("2002-06-01", time)
+                clock.adjust(time)
                 return subj.persist(aggregateId).apply(origin, type, null)
             }
         and:
-            persist("05:30:00", "miles", "born")
-            persist("06:00:00", "sonic", "born")
-            persist("08:00:00", "sonic", "wake")
-            persist("08:30:00", "miles", "wake")
-            persist("09:15:00", "amy", "wake")
-            persist("09:00:00", "sonic", "run")
-            persist("09:30:00", "miles", "jump")
-            persist("11:30:00", "sonic", "eat")
+            persist('05:30', "miles", "born")
+            persist('06:00', "miles", "wake")
+            persist('06:00', "sonic", "born")
+            persist('08:00', "sonic", "wake")
+            persist('08:00', "scourge", "wake")
+            persist('08:30', "sonic", "run")
+            persist('09:15', "amy", "wake")
+            persist('10:00', "miles", "jump")
+            persist('11:00', "sonic", "eat")
         and:
-            setTime("2002-06-01", "12:15:00")
+            clock.adjust('11:45')
             def throwingCallback = { throw new RuntimeException("no callback invokation expected") }
         when:
-            def result = subj.subscribe(origin, "wake", instant("2002-06-01", since), throwingCallback)
+            List<Event> result = subj.subscribe(origin, "wake", TestClock.instant(date, since), throwingCallback)
         then:
-            result.collect({ [it.stored, it.aggregateId] }) == expected
+            result.collect({ [time(it.stored), it.aggregateId] }).sort() == expected.sort()
         where:
-            since | expected
-            '08:15:00' | [[instant("2002-06-01", '08:30:00'), "miles"]]
-            '08:30:00' | [[instant("2002-06-01", '09:15:00'), "amy"]]
-    }
-
-    private static instant = { String date, String time -> Instant.parse(date + "T" + time + "Z") }
+            since   | window | expected
+            '05:50' | 1      | [["06:00", "miles"]]
+            '05:50' | 2      | [["06:00", "miles"], ["08:00", "scourge"], ["08:00", "sonic"]]
+            '05:50' | 3      | [["06:00", "miles"], ["08:00", "scourge"], ["08:00", "sonic"]]
+            '06:00' | 1      | [["08:00", "scourge"], ["08:00", "sonic"]]
+            '06:00' | 2      | [["08:00", "scourge"], ["08:00", "sonic"]]
+            '06:00' | 3      | [["08:00", "scourge"], ["08:00", "sonic"], ["09:15", "amy"]]
+            '08:30' | 1      | [["09:15", "amy"]]
+            '08:30' | 2      | [["09:15", "amy"]]
+            '08:30' | 3      | [["09:15", "amy"]]    }
 
     private static readFile = { Path it -> new String(Files.readAllBytes(it), StandardCharsets.UTF_8) }
 
-
+    private static time = { Instant instant ->
+        DateTimeFormatter.ofPattern("kk:mm").format(LocalDateTime.ofInstant(instant, ZoneOffset.UTC))
+    }
+    
 }

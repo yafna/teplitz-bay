@@ -36,10 +36,11 @@ public class FileEventStore implements EventStore {
     private static final String NAME_PATTERN_SEQ = PATTERN_SEQ + "={1}={2}.evt";
     private static final Collector<Path, ?, Optional<Path>> TO_LAST = Collectors.maxBy(Comparator.comparing(Path::toString));
 
-    protected Clock clock;
-    private File rootDir;
-    private Function<StoredEvent, byte[]> serializer;
-    private Function<byte[], StoredEvent> deserializer;
+    private final Clock clock;
+    private final File rootDir;
+    private final long recapWindow;
+    private final Function<StoredEvent, byte[]> serializer;
+    private final Function<byte[], StoredEvent> deserializer;
 
     /**
      * Retrieves events for a given aggregate.

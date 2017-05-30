@@ -13,7 +13,11 @@ public class GsonFileEventStore extends FileEventStore {
     private final static Gson gson = Converters.registerAll(new GsonBuilder()).create();
 
     public GsonFileEventStore(Clock clock, File rootDir) {
-        super(clock, rootDir, GsonFileEventStore::toBytes, GsonFileEventStore::parse);
+        this(clock, rootDir, 1);
+    }
+
+    public GsonFileEventStore(Clock clock, File rootDir, long recapWindow) {
+        super(clock, rootDir, recapWindow, GsonFileEventStore::toBytes, GsonFileEventStore::parse);
     }
 
     private static StoredEvent parse(byte[] bytes) {
