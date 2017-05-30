@@ -112,20 +112,20 @@ public class GsonFileEventStoreSpec extends Specification {
             def date = "2002-06-01"
             TestClock clock = TestClock.of(date, "05:30")
             FileEventStore subj = new GsonFileEventStore(clock, root, window)
-            Closure<Event> persist = { long dt, String aggregateId, String type ->
+            Closure<Event> persist = { String time, String aggregateId, String type ->
                 clock.adjust(Duration.ofMinutes(dt))
                 return subj.persist(aggregateId).apply(origin, type, null)
             }
         and:
-            persist(0, "miles", "born")
-            persist(+30, "scourge", "born")
-            persist(0, "sonic", "born")
-            persist(+120, "sonic", "wake")
-            persist(+30, "miles", "wake")
-            persist(+30, "sonic", "run")
-            persist(+15, "amy", "wake")
-            persist(+15, "miles", "jump")
-            persist(+120, "sonic", "eat")
+            persist('05:30', "miles", "born")
+            persist('06:00', "miles", "wake")
+            persist('06:00', "sonic", "born")
+            persist('08:00', "sonic", "wake")
+            persist('08:00', "scourge", "wake")
+            persist('08:30', "sonic", "run")
+            persist('09:15', "amy", "wake")
+            persist('10:00', "miles", "jump")
+            persist('11:00', "sonic", "eat")
         and:
             clock.adjust(Duration.ofMinutes(+45))
             def throwingCallback = { throw new RuntimeException("no callback invokation expected") }
@@ -135,12 +135,12 @@ public class GsonFileEventStoreSpec extends Specification {
             result.collect({ [time(it.stored), it.aggregateId] }).sort() == expected.sort()
         where:
             since   | window | expected
-            '05:50' | 1      | [["06:00", "sonic"], ["06:00", "scourge"]]
-            '05:50' | 2      | [["06:00", "sonic"], ["06:00", "scourge"]]
-            '05:50' | 3      | [["06:00", "sonic"], ["06:00", "scourge"], ["08:30", "miles"]]
-            '06:00' | 1      | [["08:30", "miles"]]
-            '06:00' | 2      | [["08:30", "miles"], ["09:15", "amy"]]
-            '06:00' | 3      | [["08:30", "miles"], ["09:15", "amy"]]
+            '05:50' | 1      | [["06:00", "miles"]]
+            '05:50' | 2      | [["06:00", "miles"], ["08:00", "scourge"], ["08:00", "sonic"]]
+            '05:50' | 3      | [["06:00", "miles"], ["08:00", "scourge"], ["08:00", "sonic"]]
+            '06:00' | 1      | [["08:00", "scourge"], ["08:00", "sonic"]]
+            '06:00' | 2      | [["08:00", "scourge"], ["08:00", "sonic"]]
+            '06:00' | 3      | [["08:00", "scourge"], ["08:00", "sonic"], ["09:15", "amy"]]
             '08:30' | 1      | [["09:15", "amy"]]
             '08:30' | 2      | [["09:15", "amy"]]
             '08:30' | 3      | [["09:15", "amy"]]
