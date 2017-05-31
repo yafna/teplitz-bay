@@ -1,8 +1,8 @@
 package com.github.yafna.events;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.ZoneId;
 
 /**
@@ -10,6 +10,7 @@ import java.time.ZoneId;
  */
 public class TestClock extends Clock {
 
+    private final String date;
     private Clock delegate;
 
     public static TestClock of(String date, String time) {
@@ -17,11 +18,12 @@ public class TestClock extends Clock {
     }
     
     private TestClock(String date, String time) {
-        this.delegate = Clock.fixed(instant(date, time), ZoneId.of("UTC"));
+        this.date = date;
+        delegate = Clock.fixed(instant(date, time), ZoneId.of("UTC"));
     }
 
-    public void adjust(Duration dt) {
-        delegate = Clock.offset(delegate, dt);
+    public void adjust(String time) {
+        delegate = Clock.fixed(instant(date, time), ZoneId.of("UTC"));
     }
 
     @Override

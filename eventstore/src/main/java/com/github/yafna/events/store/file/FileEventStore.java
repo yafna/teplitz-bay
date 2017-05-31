@@ -15,6 +15,7 @@ import java.text.MessageFormat;
 import java.text.ParseException;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -45,9 +46,9 @@ public class FileEventStore implements EventStore {
     /**
      * Retrieves events for a given aggregate.
      *
-     * @param origin Aggregate type
+     * @param origin      Aggregate type
      * @param aggregateId aggregate id
-     * @param fromSeq event sequence number after which events should be returned
+     * @param fromSeq     event sequence number after which events should be returned
      */
     @Override
     public Stream<Event> getEvents(String origin, String aggregateId, Long fromSeq) {
@@ -61,11 +62,27 @@ public class FileEventStore implements EventStore {
     @Override
     @SneakyThrows(IOException.class)
     public List<Event> subscribe(String origin, String type, Instant since, Consumer<Event> callback) {
-        return Files.walk(path(origin)).filter(NOT_DIRECTORY).map(this::readEvent).filter(
+        List<Event> events = Files.walk(path(origin)).filter(NOT_DIRECTORY).map(this::readEvent).filter(
                 event -> event.getStored().isAfter(since) && event.getType().equals(type)
         ).sorted(
                 Comparator.comparing(Event::getStored)
-        ).limit(1).collect(Collectors.toList());
+        ).collect(Collectors.toList());
+        List<Event> result = new ArrayList<>();
+        int number = 0;
+        Instant instant = events.isEmpty()? null:events.get(0).getStored();
+        for (int i = 0; i < events.size() && number < recapWindow ; ++i) {
+            if (!instant.equals(events.get(i).getStored())) {
+                instant = events.get(i).getStored();
+                number++;
+                if (result.size() >= recapWindow){
+                    return  result;
+                }
+            }
+            if(number < recapWindow){
+                result.add(events.get(i));
+            }
+        }
+        return result;
     }
 
     @SneakyThrows(IOException.class)

@@ -11,7 +11,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Clock
-import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -113,7 +112,7 @@ public class GsonFileEventStoreSpec extends Specification {
             TestClock clock = TestClock.of(date, "05:30")
             FileEventStore subj = new GsonFileEventStore(clock, root, window)
             Closure<Event> persist = { String time, String aggregateId, String type ->
-                clock.adjust(Duration.ofMinutes(dt))
+                clock.adjust(time)
                 return subj.persist(aggregateId).apply(origin, type, null)
             }
         and:
@@ -127,7 +126,7 @@ public class GsonFileEventStoreSpec extends Specification {
             persist('10:00', "miles", "jump")
             persist('11:00', "sonic", "eat")
         and:
-            clock.adjust(Duration.ofMinutes(+45))
+            clock.adjust('11:45')
             def throwingCallback = { throw new RuntimeException("no callback invokation expected") }
         when:
             List<Event> result = subj.subscribe(origin, "wake", TestClock.instant(date, since), throwingCallback)
@@ -143,8 +142,7 @@ public class GsonFileEventStoreSpec extends Specification {
             '06:00' | 3      | [["08:00", "scourge"], ["08:00", "sonic"], ["09:15", "amy"]]
             '08:30' | 1      | [["09:15", "amy"]]
             '08:30' | 2      | [["09:15", "amy"]]
-            '08:30' | 3      | [["09:15", "amy"]]
-    }
+            '08:30' | 3      | [["09:15", "amy"]]    }
 
     private static readFile = { Path it -> new String(Files.readAllBytes(it), StandardCharsets.UTF_8) }
 
