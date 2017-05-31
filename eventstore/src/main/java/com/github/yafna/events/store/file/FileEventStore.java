@@ -69,16 +69,16 @@ public class FileEventStore implements EventStore {
         ).collect(Collectors.toList());
         List<Event> result = new ArrayList<>();
         int number = 0;
-        Instant instant = events.isEmpty()? null:events.get(0).getStored();
-        for (int i = 0; i < events.size() && number < recapWindow ; ++i) {
+        Instant instant = events.isEmpty() ? null : events.get(0).getStored();
+        for (int i = 0; i < events.size() && number < recapWindow; ++i) {
             if (!instant.equals(events.get(i).getStored())) {
                 instant = events.get(i).getStored();
                 number++;
-                if (result.size() >= recapWindow){
-                    return  result;
+                if (result.size() >= recapWindow) {
+                    return result;
                 }
             }
-            if(number < recapWindow){
+            if (number < recapWindow) {
                 result.add(events.get(i));
             }
         }
