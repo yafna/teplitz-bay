@@ -16,8 +16,8 @@ import java.text.ParseException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
-import java.util.List;
 import java.util.Optional;
+import java.util.Spliterator;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -36,10 +36,10 @@ public class FileEventStore implements EventStore {
     private static final String NAME_PATTERN_SEQ = PATTERN_SEQ + "={1}={2}.evt";
     private static final Collector<Path, ?, Optional<Path>> TO_LAST = Collectors.maxBy(Comparator.comparing(Path::toString));
 
-    protected Clock clock;
-    private File rootDir;
-    private Function<StoredEvent, byte[]> serializer;
-    private Function<byte[], StoredEvent> deserializer;
+    private final Clock clock;
+    private final File rootDir;
+    private final Function<StoredEvent, byte[]> serializer;
+    private final Function<byte[], StoredEvent> deserializer;
 
     /**
      * Retrieves events for a given aggregate.
@@ -59,12 +59,12 @@ public class FileEventStore implements EventStore {
 
     @Override
     @SneakyThrows(IOException.class)
-    public List<Event> subscribe(String origin, String type, Instant since, Consumer<Event> callback) {
+    public Spliterator<Event> subscribe(String origin, String type, Instant since, Consumer<Event> callback) {
         return Files.walk(path(origin)).filter(NOT_DIRECTORY).map(this::readEvent).filter(
                 event -> event.getStored().isAfter(since) && event.getType().equals(type)
         ).sorted(
                 Comparator.comparing(Event::getStored)
-        ).limit(1).collect(Collectors.toList());
+        ).spliterator();
     }
 
     @SneakyThrows(IOException.class)

@@ -5,6 +5,7 @@ import com.github.yafna.events.Event;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Spliterator;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -26,7 +27,7 @@ public interface EventStore {
      * @param callback function to be invoked on each event.
      * @return List of events present in store since (non-inclusive) the given instant,   
      */
-    List<Event> subscribe(String origin, String type, Instant since, Consumer<Event> callback);
+    Spliterator<Event> subscribe(String origin, String type, Instant since, Consumer<Event> callback);
 
     Persister persist(String aggregateId);
 
