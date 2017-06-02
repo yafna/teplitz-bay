@@ -11,14 +11,17 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.text.MessageFormat;
 import java.text.ParseException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.UUID;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -33,7 +36,7 @@ public class FileEventStore implements EventStore {
     private static final Predicate<Path> NOT_DIRECTORY = path -> !Files.isDirectory(path);
     private static final String NAME_PATTERN_TIME = "{0}={1}={2}.evt";
     private static final String PATTERN_SEQ = "{0,number,00000000}";
-    private static final String NAME_PATTERN_SEQ = PATTERN_SEQ + "={1}={2}.evt";
+    private static final String NAME_PATTERN_SEQ = PATTERN_SEQ + "={1}={2}={3}.evt";
     private static final Collector<Path, ?, Optional<Path>> TO_LAST = Collectors.maxBy(Comparator.comparing(Path::toString));
 
     private final Clock clock;
@@ -60,8 +63,10 @@ public class FileEventStore implements EventStore {
     @Override
     @SneakyThrows(IOException.class)
     public Spliterator<Event> subscribe(String origin, String type, Instant since, Consumer<Event> callback) {
-        return Files.walk(path(origin)).filter(NOT_DIRECTORY).map(this::readEvent).filter(
-                event -> event.getStored().isAfter(since) && event.getType().equals(type)
+        return Files.find(
+                path(origin), 2, isFileCreatedAfter(since, type)
+        ).map(this::readEvent).filter(
+                event -> event.getType().equals(type)
         ).sorted(
                 Comparator.comparing(Event::getStored)
         ).spliterator();
@@ -122,9 +127,9 @@ public class FileEventStore implements EventStore {
         Path path = exists(directory).orElseGet(() -> mkDirs(directory));
 
         String name = aggregateId.map(aid -> {
-            Long seq = lastEvent(path).map(this::getSeqFromFileEvent).orElse(0L);
+            Long seq = lastEvent(path).map(p -> getSeq(p) + 1).orElse(0L);
             event.setSeq(seq);
-            return MessageFormat.format(NAME_PATTERN_SEQ, seq, event.getId(), event.getType());
+            return MessageFormat.format(NAME_PATTERN_SEQ, seq, event.getStored(), event.getId(), event.getType());
         }).orElseGet(() -> MessageFormat.format(
                 NAME_PATTERN_TIME, formatTime(event.getStored()), event.getId(), event.getType()
         ));
@@ -155,11 +160,34 @@ public class FileEventStore implements EventStore {
         }
     }
 
-    private Long getSeqFromFileEvent(Path p) {
-        String name = p.toString();
+    private static BiPredicate<Path, BasicFileAttributes> isFileCreatedAfter(Instant since, String type) {
+        String timestamp = since.toString();
+        return (path, attributes) -> {
+            Object[] parse = parse(path.getFileName());
+            return !Files.isDirectory(path) 
+                    && ((String) parse[1]).compareTo(timestamp) > 0 
+                    && Objects.equals(type, (String) parse[3]);
+        };
+    }
+
+    /**
+     * Extracts sequence number form event file name.  
+     */
+    private static Long getSeq(Path path) {
+        return ((Number) parse(path)[0]).longValue();
+    }
+
+    /**
+     * Extracts creation timestamp from event file name.  
+     */
+    private static String getTimestamp(Path path) {
+        return (String) parse(path.getFileName())[1];
+    }
+
+    private static Object[] parse(Path path) {
+        String name = path.toString();
         try {
-            Object[] parsed = new MessageFormat(NAME_PATTERN_SEQ).parse(name);
-            return ((Number) parsed[0]).longValue() + 1;
+            return new MessageFormat(NAME_PATTERN_SEQ).parse(name);
         } catch (ParseException e) {
             throw new IllegalArgumentException("Error parsing file path: " + name, e);
         }
