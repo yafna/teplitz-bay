@@ -107,7 +107,7 @@ public class GsonFileEventStoreSpec extends Specification {
 
 
     @Unroll
-    def "given recap window [#window], subscribe(#since) should return #expected"() {
+    def "subscribe(#since) should return #expected"() {
         given:
             def date = "2002-06-01"
             TestClock clock = TestClock.of(date, "05:30")
@@ -131,10 +131,9 @@ public class GsonFileEventStoreSpec extends Specification {
             def throwingCallback = { throw new RuntimeException("no callback invokation expected") }
         when:
             Spliterator<Event> result = subj.subscribe(origin, "wake", TestClock.instant(date, since), throwingCallback)
+            def events = StreamSupport.stream(result, false).collect({ [time(it.stored), it.aggregateId] }).sort()
         then:
-            StreamSupport.stream(result, false).collect(
-                    { [time(it.stored), it.aggregateId] }
-            ).sort() == expected.sort()
+            events == expected.sort()
         where:
             since   | expected
             '05:50' | [["06:00", "miles"], ["08:00", "scourge"], ["08:00", "sonic"], ["09:15", "amy"]]
