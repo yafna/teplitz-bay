@@ -24,7 +24,6 @@ import java.util.UUID;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -33,7 +32,7 @@ import java.util.stream.Stream;
 @AllArgsConstructor
 public class FileEventStore implements EventStore {
     private static final Comparator<Path> BY_NAME = Comparator.comparing(Path::toString);
-    private static final Predicate<Path> NOT_DIRECTORY = path -> !Files.isDirectory(path);
+    private static final BiPredicate<Path, BasicFileAttributes> NOT_DIRECTORY = (p, attrs) -> !attrs.isDirectory();
     private static final String NAME_PATTERN_TIME = "{0}={1}={2}.evt";
     private static final String PATTERN_SEQ = "{0,number,00000000}";
     private static final String NAME_PATTERN_SEQ = PATTERN_SEQ + "={1}={2}={3}.evt";
@@ -53,11 +52,12 @@ public class FileEventStore implements EventStore {
      */
     @Override
     public Stream<Event> getEvents(String origin, String aggregateId, Long fromSeq) {
-        Predicate<Path> filter = Optional.ofNullable(fromSeq).map(FileEventStore::isAfter).orElse(f -> true);
+        BiPredicate<Path, BasicFileAttributes> filter = Optional.ofNullable(fromSeq).map(
+                seq -> NOT_DIRECTORY.and(isAfter(seq))
+        ).orElse(NOT_DIRECTORY);
         Path path = getDirectory(origin, Optional.ofNullable(aggregateId));
-        return exists(path).map(
-                p -> readEvents(p, filter).sequential()
-        ).orElseGet(Stream::empty);
+
+        return Files.exists(path) ? readEvents(ensureDirectory(path), filter).sequential() : Stream.empty();
     }
 
     @Override
@@ -73,8 +73,8 @@ public class FileEventStore implements EventStore {
     }
 
     @SneakyThrows(IOException.class)
-    private Stream<Event> readEvents(Path subdir, Predicate<Path> filter) {
-        return Files.list(subdir).filter(NOT_DIRECTORY).filter(filter).sorted(BY_NAME).map(this::readEvent);
+    private Stream<Event> readEvents(Path subdir, BiPredicate<Path, BasicFileAttributes> pathfff) {
+        return Files.find(subdir, 1, pathfff).sorted(BY_NAME).map(this::readEvent);
     }
 
     @SneakyThrows(IOException.class)
@@ -124,7 +124,7 @@ public class FileEventStore implements EventStore {
         String dir = event.getOrigin();
         Optional<String> aggregateId = Optional.ofNullable(event.getAggregateId());
         Path directory = getDirectory(dir, aggregateId);
-        Path path = exists(directory).orElseGet(() -> mkDirs(directory));
+        Path path = ensureDirectoryExists(directory);
 
         String name = aggregateId.map(aid -> {
             Long seq = lastEvent(path).map(p -> getSeq(p) + 1).orElse(0L);
@@ -160,28 +160,11 @@ public class FileEventStore implements EventStore {
         }
     }
 
-    private static BiPredicate<Path, BasicFileAttributes> isFileCreatedAfter(Instant since, String type) {
-        String timestamp = since.toString();
-        return (path, attributes) -> {
-            Object[] parse = parse(path.getFileName());
-            return !Files.isDirectory(path) 
-                    && ((String) parse[1]).compareTo(timestamp) > 0 
-                    && Objects.equals(type, (String) parse[3]);
-        };
-    }
-
     /**
-     * Extracts sequence number form event file name.  
+     * Extracts sequence number form event file name.
      */
     private static Long getSeq(Path path) {
         return ((Number) parse(path)[0]).longValue();
-    }
-
-    /**
-     * Extracts creation timestamp from event file name.  
-     */
-    private static String getTimestamp(Path path) {
-        return (String) parse(path.getFileName())[1];
     }
 
     private static Object[] parse(Path path) {
@@ -197,23 +180,23 @@ public class FileEventStore implements EventStore {
         return UUID.randomUUID().toString();
     }
 
-    private static Optional<Path> exists(Path path) {
-        if (Files.exists(path)) {
-            if (Files.isDirectory(path)) {
-                return Optional.of(path);
-            } else {
-                throw new IllegalStateException("Must be a directory: [" + String.valueOf(path) + "]");
-            }
+    private static Path ensureDirectoryExists(Path directory) {
+        if (Files.exists(directory)) {
+            return ensureDirectory(directory);
         } else {
-            return Optional.empty();
+            try {
+                return Files.createDirectories(directory);
+            } catch (IOException e) {
+                throw new IllegalStateException("Unable to create dir: [" + String.valueOf(directory) + "]", e);
+            }
         }
     }
 
-    private static Path mkDirs(Path path) {
-        try {
-            return Files.createDirectories(path);
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to create dir: [" + String.valueOf(path) + "]", e);
+    private static Path ensureDirectory(Path path) {
+        if (Files.isDirectory(path)) {
+            return path;
+        } else {
+            throw new IllegalStateException("Must be a directory: [" + String.valueOf(path) + "]");
         }
     }
 
@@ -224,11 +207,23 @@ public class FileEventStore implements EventStore {
         };
     }
 
-    private static Predicate<Path> isAfter(Long v) {
-        String prefix = MessageFormat.format(PATTERN_SEQ, v);
-        return file -> {
+    private static BiPredicate<Path, BasicFileAttributes> isAfter(Long seq) {
+        String prefix = MessageFormat.format(PATTERN_SEQ, seq);
+        return (file, attrs) -> {
             String name = file.getFileName().toString();
             return name.compareTo(prefix) > 0 && !name.startsWith(prefix);
+        };
+    }
+
+    private static BiPredicate<Path, BasicFileAttributes> isFileCreatedAfter(Instant since, String type) {
+        String sinceString = since.toString();
+        return (path, attributes) -> {
+            if (Files.isDirectory(path)) {
+                return false;
+            } else {
+                Object[] parse = parse(path.getFileName());
+                return ((String) parse[1]).compareTo(sinceString) > 0 && Objects.equals(type, (String) parse[3]);
+            }
         };
     }
 
