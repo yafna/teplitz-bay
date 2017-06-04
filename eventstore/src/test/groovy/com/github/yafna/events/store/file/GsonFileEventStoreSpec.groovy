@@ -10,12 +10,9 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.time.Clock
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.ZoneOffset
+import java.time.*
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.StreamSupport
 
 public class GsonFileEventStoreSpec extends Specification {
@@ -40,14 +37,16 @@ public class GsonFileEventStoreSpec extends Specification {
             event.id != null
             XJson.parse(body[0]).matches(data)
             XJson.parse(body[0]).matches([
-                    "origin": "hedgehog",
-                    "stored": now,
+                    "origin" : "hedgehog",
+                    "stored" : now,
                     "payload": "12345"
             ])
         where:
-            aggregate  | type          | method                     | subdir             | data
-            null       | "war.started" | { it.persist() }           | origin             | ["type": "war.started"]
-            "43a0f882" | "created"     | { it.persist("43a0f882") } | "$origin/43a0f882" | ["type": "created", "aggregateId": "43a0f882"]
+            aggregate  | type          | method           | subdir             | data
+            null       | "war.started" | { it.persist() } | origin             | ["type": "war.started"]
+            "43a0f882" | "created"     | {
+                it.persist("43a0f882")
+            }                                             | "$origin/43a0f882" | ["type": "created", "aggregateId": "43a0f882"]
 
     }
 
@@ -140,6 +139,45 @@ public class GsonFileEventStoreSpec extends Specification {
             '06:00' | [["08:00", "scourge"], ["08:00", "sonic"], ["09:15", "amy"]]
             '08:00' | [["09:15", "amy"]]
             '08:30' | [["09:15", "amy"]]
+    }
+
+    def "subscribe on empty store"() {
+        given:
+            def date = "2002-06-01"
+            TestClock clock = TestClock.of(date, "05:30")
+            FileEventStore subj = new GsonFileEventStore(clock, root)
+            Closure<Event> persist = { String time, String aggregateId, String type ->
+                clock.adjust(time)
+                return subj.persist(aggregateId).apply(origin, type, null)
+            }
+            def throwingCallback = { throw new RuntimeException("no callback invokation expected") }
+        when:
+            subj.subscribe(origin, "wake", TestClock.instant(date, "05:30"), throwingCallback)
+        then:
+            clock.adjust('11:45')
+
+    }
+
+    def "first subscribe(#since) then  store updated callabck should be called"() {
+        given:
+            def date = "2002-06-01"
+            TestClock clock = TestClock.of(date, "05:30")
+            FileEventStore subj = new GsonFileEventStore(clock, root)
+            Closure<Event> persist = { String time, String aggregateId, String type ->
+                clock.adjust(time)
+                return subj.persist(aggregateId).apply(origin, type, null)
+            }
+        and:
+            persist('05:40', "miles", "born")
+            AtomicInteger i = new AtomicInteger(0);
+            def throwingCallback = { i.set(1)}
+        when:
+            subj.subscribe(origin, "wake", TestClock.instant(date, "05:30"), throwingCallback)
+            persist('06:00', "miles", "wake")
+        then:
+            clock.adjust('11:45')
+            i.get() == 1
+
     }
 
     private static readFile = { Path it -> new String(Files.readAllBytes(it), StandardCharsets.UTF_8) }
