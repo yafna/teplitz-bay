@@ -10,9 +10,15 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.time.*
+import java.time.Clock
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.stream.Collectors
 import java.util.stream.StreamSupport
 
 public class GsonFileEventStoreSpec extends Specification {
@@ -141,43 +147,57 @@ public class GsonFileEventStoreSpec extends Specification {
             '08:30' | [["09:15", "amy"]]
     }
 
-    def "subscribe on empty store"() {
-        given:
+    def "subscribe to event on empty store"() {
+        given: "empty store"
             def date = "2002-06-01"
             TestClock clock = TestClock.of(date, "05:30")
             FileEventStore subj = new GsonFileEventStore(clock, root)
-            Closure<Event> persist = { String time, String aggregateId, String type ->
-                clock.adjust(time)
-                return subj.persist(aggregateId).apply(origin, type, null)
-            }
-            def throwingCallback = { throw new RuntimeException("no callback invokation expected") }
-        when:
-            subj.subscribe(origin, "wake", TestClock.instant(date, "05:30"), throwingCallback)
-        then:
-            clock.adjust('11:45')
-
+            AtomicInteger callbacks = new AtomicInteger(0);
+        when: "subscribe to 'wake'" 
+            def spliterator = subj.subscribe(origin, "wake", TestClock.instant(date, "05:30"), { callbacks.incrementAndGet() })
+        then: "returned spliterator is null"
+            spliterator == null
+            callbacks.get() == 0
+        when: "new 'wake' event is persisted then callback is invoked"
+            subj.persist("miles").apply(origin, "wake", null)
+            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
+        then: "callback is invoked"
+            callbacks.get() == 1
+        when: "new 'born' event is persisted then callback is invoked" 
+            subj.persist("sonic").apply(origin, "born", null)
+            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
+        then: "callback is not invoked"
+            callbacks.get() == 1
     }
 
-    def "first subscribe(#since) then  store updated callabck should be called"() {
-        given:
+    def "subscribe to event on store that already has event of that type"() {
+        given: "store with 'wake' event"
             def date = "2002-06-01"
             TestClock clock = TestClock.of(date, "05:30")
             FileEventStore subj = new GsonFileEventStore(clock, root)
-            Closure<Event> persist = { String time, String aggregateId, String type ->
-                clock.adjust(time)
-                return subj.persist(aggregateId).apply(origin, type, null)
-            }
-        and:
-            persist('05:40', "miles", "born")
-            AtomicInteger i = new AtomicInteger(0);
-            def throwingCallback = { i.set(1)}
-        when:
-            subj.subscribe(origin, "wake", TestClock.instant(date, "05:30"), throwingCallback)
-            persist('06:00', "miles", "wake")
-        then:
-            clock.adjust('11:45')
-            i.get() == 1
-
+            AtomicInteger callbacks = new AtomicInteger(0);
+            subj.persist("amy").apply(origin, "wake", null)
+        when: "subscribe to 'wake'" 
+            def spliterator1 = subj.subscribe(origin, "wake", TestClock.instant(date, "05:00"), { callbacks.incrementAndGet() })
+            def events = StreamSupport.stream(spliterator1, false).collect(Collectors.toList()).collect({ it.getAggregateId() })
+        then: "returned spliterator is null"
+            events == ["amy"]
+            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
+            callbacks.get() == 0
+        when: "subscribe to 'wake'"
+            def spliterator2 = subj.subscribe(origin, "wake", TestClock.instant(date, "05:30"), { callbacks.incrementAndGet() })
+        then: "returned spliterator is null"
+            spliterator2 == null
+        when: "new 'wake' event is persisted then callback is invoked"
+            subj.persist("miles").apply(origin, "wake", null)
+            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
+        then: "callback is invoked"
+            callbacks.get() == 1
+        when: "new 'born' event is persisted then callback is invoked"
+            subj.persist("sonic").apply(origin, "born", null)
+            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
+        then: "callback is not invoked"
+            callbacks.get() == 1
     }
 
     private static readFile = { Path it -> new String(Files.readAllBytes(it), StandardCharsets.UTF_8) }
