@@ -17,10 +17,15 @@ import java.text.ParseException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -43,6 +48,9 @@ public class FileEventStore implements EventStore {
     private final Function<StoredEvent, byte[]> serializer;
     private final Function<byte[], StoredEvent> deserializer;
 
+    protected final ForkJoinPool executor = new ForkJoinPool();
+    private final ConcurrentMap<String, ConcurrentMap<String, List<Consumer<Event>>>> subscribers = new ConcurrentHashMap<>();
+
     /**
      * Retrieves events for a given aggregate.
      *
@@ -63,13 +71,30 @@ public class FileEventStore implements EventStore {
     @Override
     @SneakyThrows(IOException.class)
     public Spliterator<Event> subscribe(String origin, String type, Instant since, Consumer<Event> callback) {
-        return Files.find(
-                path(origin), 2, isFileCreatedAfter(since, type)
-        ).map(this::readEvent).filter(
-                event -> event.getType().equals(type)
-        ).sorted(
-                Comparator.comparing(Event::getStored)
-        ).spliterator();
+        Path path = path(origin);
+        if (Files.exists(path)) {
+            Spliterator<Event> spliterator = Files.find(
+                    path, 2, isFileCreatedAfter(since, type)
+            ).map(this::readEvent).filter(
+                    event -> event.getType().equals(type)
+            ).sorted(
+                    Comparator.comparing(Event::getStored)
+            ).collect(
+                    // TODO Replace combination of sorted() and collect() that will load all files into memory
+                    // with a limited-size collector that will only keep a limited number of first items  
+                    Collectors.toList()
+            ).spliterator();
+                    
+            if (spliterator.getExactSizeIfKnown() != 0) {
+                return spliterator;
+            }
+        }
+        subscribers.computeIfAbsent(
+                origin, o -> new ConcurrentHashMap<>()
+        ).computeIfAbsent(
+                type, t -> new LinkedList<>()
+        ).add(callback);
+        return null;
     }
 
     @SneakyThrows(IOException.class)
@@ -121,6 +146,24 @@ public class FileEventStore implements EventStore {
     }
 
     private StoredEvent write(StoredEvent event) {
+        StoredEvent stored = write0(event);
+        callSubscribers(stored);
+        return stored;
+    }
+
+    private void callSubscribers(StoredEvent stored) {
+        Optional.ofNullable(
+                subscribers.get(stored.getOrigin())
+        ).map(
+                byType -> byType.get(stored.getType())
+        ).ifPresent(
+                callbacks -> callbacks.forEach(callback -> 
+                    executor.submit(() -> callback.accept(stored))
+                )
+        );
+    }
+
+    private StoredEvent write0(StoredEvent event) {
         String dir = event.getOrigin();
         Optional<String> aggregateId = Optional.ofNullable(event.getAggregateId());
         Path directory = getDirectory(dir, aggregateId);
@@ -234,5 +277,6 @@ public class FileEventStore implements EventStore {
     private static String formatTime(Instant stored) {
         return String.valueOf(stored).replace(":", "-");
     }
+
 
 }
