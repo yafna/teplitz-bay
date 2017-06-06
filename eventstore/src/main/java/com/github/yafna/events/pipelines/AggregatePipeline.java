@@ -74,7 +74,7 @@ public class AggregatePipeline<A extends Aggregate> {
     protected <T> Event store(T event, String aggregateId) {
         String type = event.getClass().getAnnotation(EvType.class).value();
         String json = gson.toJson(event);
-        return store.persist(aggregateId).apply(origin, type, json);
+        return store.persist(origin, aggregateId, type, json);
     }
 
     private void process(Event event, A aggregate) {

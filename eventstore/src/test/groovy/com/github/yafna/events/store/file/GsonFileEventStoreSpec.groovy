@@ -3,6 +3,7 @@ package com.github.yafna.events.store.file
 import com.github.yafna.events.Event
 import com.github.yafna.events.TestClock
 import com.github.yafna.events.XJson
+import com.github.yafna.events.store.ProtoEvent
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -36,24 +37,21 @@ public class GsonFileEventStoreSpec extends Specification {
             String now = "2002-05-19T22:33:11Z"
             String origin = "hedgehog"
         when:
-            Event event = method(subj).apply(origin, type, "12345")
+            Event event = subj.persist(origin, aggregate, type, "12345")
             Path path = Paths.get(root.getPath(), subdir)
             List<String> body = Files.list(path).filter({ !Files.isDirectory(it) }).collect(readFile)
         then:
             event.id != null
             XJson.parse(body[0]).matches(data)
             XJson.parse(body[0]).matches([
-                    "origin" : "hedgehog",
-                    "stored" : now,
+                    "origin": "hedgehog",
+                    "stored": now,
                     "payload": "12345"
             ])
         where:
-            aggregate  | type          | method           | subdir             | data
-            null       | "war.started" | { it.persist() } | origin             | ["type": "war.started"]
-            "43a0f882" | "created"     | {
-                it.persist("43a0f882")
-            }                                             | "$origin/43a0f882" | ["type": "created", "aggregateId": "43a0f882"]
-
+            aggregate  | type          | subdir             | data
+            null       | "war.started" | origin             | ["type": "war.started"]
+            "43a0f882" | "created"     | "$origin/43a0f882" | ["type": "created", "aggregateId": "43a0f882"]
     }
 
     def "given event should persist it and read event stream"() {
@@ -61,7 +59,7 @@ public class GsonFileEventStoreSpec extends Specification {
             String aggregateId = "43a0f882"
             String type = "created"
         when:
-            Event event = subj.persist(aggregateId).apply(origin, type, "12345")
+            Event event = subj.persist(origin, aggregateId, type, "12345")
         then: "Newly created event has seq == 0"
             event.seq == 0L
         when:
@@ -77,7 +75,7 @@ public class GsonFileEventStoreSpec extends Specification {
         and: "polling for events after seq=0 returns no event"
             getEvents(0) == []
         when:
-            Event event2 = subj.persist(aggregateId).apply(origin, type, "12345")
+            Event event2 = subj.persist(origin, aggregateId, type, "12345")
         then: "polling for all events on aggregate returns 2 events"
             getEvents(null) == [
                     [origin, aggregateId, 0, event.id, type, instant],
@@ -95,22 +93,32 @@ public class GsonFileEventStoreSpec extends Specification {
 
     def "given multiple events should persist and read them stream"() {
         given:
-            def getEvents = { String aggregateId ->
-                subj.getEvents(origin, aggregateId, null).collect({
-                    [it.origin, it.aggregateId, it.id, it.type]
-                })
-            }
+            def collector = { [it.origin, it.aggregateId, it.id, it.type] }
         when:
-            Event global = subj.persist().apply(origin, "global", "12345")
-            Event one = subj.persist("111").apply(origin, "local", "111-123")
-            Event two = subj.persist("222").apply(origin, "local", "222-123")
+            Event global = subj.persist(origin, null, "global", "12345")
+            Event one = subj.persist(origin, "111", "local", "111-123")
+            Event two = subj.persist(origin, "222", "local", "222-123")
         then:
-            getEvents(null) == [[origin, null, global.id, "global"]]
-            getEvents("111") == [[origin, "111", one.id, "local"]]
-            getEvents("222") == [[origin, "222", two.id, "local"]]
+            getEvents(origin, null, collector) == [[origin, null, global.id, "global"]]
+            getEvents(origin, "111", collector) == [[origin, "111", one.id, "local"]]
+            getEvents(origin, "222", collector) == [[origin, "222", two.id, "local"]]
     }
 
 
+    def "given multiple events should persist them"() {
+        given:
+            ProtoEvent[] events = [
+                    ProtoEvent.of("turkey", "alpha", "evaporated", "622"),
+                    ProtoEvent.of("chicken", "beta", "fried", null),
+                    ProtoEvent.of("chicken", "beta", "decapitated", null),
+            ] as ProtoEvent[]
+        when:
+            subj.persist("1", "2", events)
+        then:
+            getEvents("turkey", "alpha", { [it.type, it.payload] }) == [["evaporated", "622"]]
+            getEvents("chicken", "beta", { it.type }) == ["fried", "decapitated"]
+    }
+    
     @Unroll
     def "subscribe(#since) should return #expected"() {
         given:
@@ -119,7 +127,7 @@ public class GsonFileEventStoreSpec extends Specification {
             FileEventStore subj = new GsonFileEventStore(clock, root)
             Closure<Event> persist = { String time, String aggregateId, String type ->
                 clock.adjust(time)
-                return subj.persist(aggregateId).apply(origin, type, null)
+                return subj.persist(origin, aggregateId, type, null)
             }
         and:
             persist('05:30', "miles", "born")
@@ -159,12 +167,12 @@ public class GsonFileEventStoreSpec extends Specification {
             spliterator == null
             callbacks.get() == 0
         when: "new 'wake' event is persisted then callback is invoked"
-            subj.persist("miles").apply(origin, "wake", null)
+            subj.persist(origin, "miles", "wake", null)
             subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
         then: "callback is invoked"
             callbacks.get() == 1
         when: "new 'born' event is persisted then callback is invoked" 
-            subj.persist("sonic").apply(origin, "born", null)
+            subj.persist(origin, "sonic", "born", null)
             subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
         then: "callback is not invoked"
             callbacks.get() == 1
@@ -176,7 +184,7 @@ public class GsonFileEventStoreSpec extends Specification {
             TestClock clock = TestClock.of(date, "05:30")
             FileEventStore subj = new GsonFileEventStore(clock, root)
             AtomicInteger callbacks = new AtomicInteger(0);
-            subj.persist("amy").apply(origin, "wake", null)
+            subj.persist(origin, "amy", "wake", null)
         when: "subscribe to 'wake'" 
             def spliterator1 = subj.subscribe(origin, "wake", TestClock.instant(date, "05:00"), { callbacks.incrementAndGet() })
             def events = StreamSupport.stream(spliterator1, false).collect(Collectors.toList()).collect({ it.getAggregateId() })
@@ -189,17 +197,21 @@ public class GsonFileEventStoreSpec extends Specification {
         then: "returned spliterator is null"
             spliterator2 == null
         when: "new 'wake' event is persisted then callback is invoked"
-            subj.persist("miles").apply(origin, "wake", null)
+            subj.persist(origin, "miles", "wake", null)
             subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
         then: "callback is invoked"
             callbacks.get() == 1
         when: "new 'born' event is persisted then callback is invoked"
-            subj.persist("sonic").apply(origin, "born", null)
+            subj.persist(origin, "sonic", "born", null)
             subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
         then: "callback is not invoked"
             callbacks.get() == 1
     }
 
+    def <T> List<T> getEvents(String origin, String aggregateId, Closure<T> collector) {
+        return subj.getEvents(origin, aggregateId, null).collect(collector)
+    }
+    
     private static readFile = { Path it -> new String(Files.readAllBytes(it), StandardCharsets.UTF_8) }
 
     private static time = { Instant instant ->
