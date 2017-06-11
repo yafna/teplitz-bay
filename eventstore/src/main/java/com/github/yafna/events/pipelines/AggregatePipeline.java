@@ -6,6 +6,7 @@ import com.github.yafna.events.annotations.EvType;
 import com.github.yafna.events.annotations.Origin;
 import com.github.yafna.events.handlers.DomainHandlerRegistry;
 import com.github.yafna.events.store.EventStore;
+import com.github.yafna.events.utils.StreamUtils;
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,7 +15,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
-import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -93,20 +93,10 @@ public class AggregatePipeline<A extends Aggregate> {
         String id = event.getId();
         log.debug("Handling {} [{}/{}]", id, event.getType(), event.getAggregateId());
         T payload = gson.fromJson(event.getPayload(), type);
-        fold(handlers.get(type).stream().map(
+        StreamUtils.fold(handlers.get(type).stream().map(
                 h -> (Function<A, A>) a -> h.apply(a, event, payload)
         )).apply(object);
         log.debug("Processed [{}]: {}", id, event.getType());
-    }
-
-    private static <T> UnaryOperator<T> fold(Stream<Function<T, T>> operations) {
-        return initial -> {
-            T value = initial;
-            for (Iterator<Function<T, T>> it = operations.iterator(); it.hasNext();) {
-                value = it.next().apply(value);
-            }
-            return value;
-        };
     }
 
 }
