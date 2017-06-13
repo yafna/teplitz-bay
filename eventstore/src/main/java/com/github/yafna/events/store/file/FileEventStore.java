@@ -26,7 +26,6 @@ import java.util.Spliterator;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -49,7 +48,6 @@ public class FileEventStore implements EventStore {
     private final Function<StoredEvent, byte[]> serializer;
     private final Function<byte[], StoredEvent> deserializer;
 
-    protected final ForkJoinPool executor = new ForkJoinPool();
     private final ConcurrentMap<String, ConcurrentMap<String, List<Consumer<Event>>>> subscribers = new ConcurrentHashMap<>();
 
     /**
@@ -152,9 +150,7 @@ public class FileEventStore implements EventStore {
         ).map(
                 byType -> byType.get(stored.getType())
         ).ifPresent(
-                callbacks -> callbacks.forEach(callback ->
-                        executor.submit(() -> callback.accept(stored))
-                )
+                callbacks -> callbacks.forEach(callback -> callback.accept(stored))
         );
     }
 
