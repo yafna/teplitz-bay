@@ -18,7 +18,7 @@ import java.util.stream.Stream;
 
 @Slf4j
 public class EventPipeline<A, T extends DomainEvent<A>> {
-    protected final ForkJoinPool executor = new ForkJoinPool();
+    private final ForkJoinPool executor;
     private final EventDispatcher dispatcher;
     private final String origin;
     private final String handlerId;
@@ -27,13 +27,20 @@ public class EventPipeline<A, T extends DomainEvent<A>> {
     public EventPipeline(
             EventDispatcher dispatcher, Class<T> eventType, EventHandler<T> handler, String handlerId, Clock clock
     ) {
+        this(dispatcher, eventType, handler, handlerId, clock, new ForkJoinPool());
+    }
+
+    public EventPipeline(
+            EventDispatcher dispatcher, Class<T> eventType, EventHandler<T> handler, String handlerId, Clock clock, ForkJoinPool executor
+    ) {
         origin = PayloadUtils.origin(eventType);
+        this.executor = executor;
         this.dispatcher = dispatcher;
         this.handler = handler;
         this.handlerId = handlerId;
         Duration timeWindow = Duration.ofDays(1);
         Instant since = clock.instant().minus(timeWindow);
-        executor.submit(() -> recap(dispatcher, eventType, since));
+        this.executor.submit(() -> recap(dispatcher, eventType, since));
     }
 
     private void recap(EventDispatcher dispatcher, Class<T> eventType, Instant start) {
@@ -55,7 +62,7 @@ public class EventPipeline<A, T extends DomainEvent<A>> {
     }
 
     private Instant process(Event meta, T payload) {
-        Stream<EmittedEvent<?>> emitted = Stream.concat(
+        Stream<EmittedEvent> emitted = Stream.concat(
                 handler.apply(meta, payload),
                 Stream.of(EmittedEvent.of("handlers", handlerId, "handled"))
         );

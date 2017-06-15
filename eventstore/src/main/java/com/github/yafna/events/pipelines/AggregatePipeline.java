@@ -2,7 +2,7 @@ package com.github.yafna.events.pipelines;
 
 import com.github.yafna.events.Event;
 import com.github.yafna.events.aggregate.Aggregate;
-import com.github.yafna.events.annotations.EvType;
+import com.github.yafna.events.aggregate.PayloadUtils;
 import com.github.yafna.events.annotations.Origin;
 import com.github.yafna.events.handlers.DomainHandlerRegistry;
 import com.github.yafna.events.store.EventStore;
@@ -72,7 +72,7 @@ public class AggregatePipeline<A extends Aggregate> {
     }
 
     protected <T> Event store(T event, String aggregateId) {
-        String type = event.getClass().getAnnotation(EvType.class).value();
+        String type = PayloadUtils.eventType(event.getClass()).value();
         String json = gson.toJson(event);
         return store.persist(origin, aggregateId, type, json);
     }
