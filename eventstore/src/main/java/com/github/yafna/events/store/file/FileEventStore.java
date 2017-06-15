@@ -98,8 +98,8 @@ public class FileEventStore implements EventStore {
     }
 
     @SneakyThrows(IOException.class)
-    private Stream<Event> readEvents(Path subdir, BiPredicate<Path, BasicFileAttributes> pathfff) {
-        return Files.find(subdir, 1, pathfff).sorted(BY_NAME).map(this::readEvent);
+    private Stream<Event> readEvents(Path subdir, BiPredicate<Path, BasicFileAttributes> matcher) {
+        return Files.find(subdir, 1, matcher).sorted(BY_NAME).map(this::readEvent);
     }
 
     @SneakyThrows(IOException.class)
