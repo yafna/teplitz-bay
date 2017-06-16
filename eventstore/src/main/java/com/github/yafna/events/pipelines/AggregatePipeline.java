@@ -1,13 +1,12 @@
 package com.github.yafna.events.pipelines;
 
 import com.github.yafna.events.Event;
+import com.github.yafna.events.EventMeta;
 import com.github.yafna.events.aggregate.Aggregate;
-import com.github.yafna.events.aggregate.PayloadUtils;
 import com.github.yafna.events.annotations.Origin;
+import com.github.yafna.events.dispatcher.EventDispatcher;
 import com.github.yafna.events.handlers.DomainHandlerRegistry;
-import com.github.yafna.events.store.EventStore;
 import com.github.yafna.events.utils.StreamUtils;
-import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
@@ -15,16 +14,11 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
 public class AggregatePipeline<A extends Aggregate> {
-    private final static String UNKNOWN_TYPE = "Unknown type";
-
-    private final Gson gson = new Gson();
-
-    private final EventStore store;
+    private final EventDispatcher dispatcher;
     private final Map<String, A> objects = new HashMap<>();
     private final String origin;
     private final DomainHandlerRegistry<A> handlers;
@@ -33,20 +27,20 @@ public class AggregatePipeline<A extends Aggregate> {
 
     /**
      * @param clazz Aggregate class
-     * @param store event store to use
+     * @param dispatcher event dispatcher to use
      * @param eventTypes index map (event type name) -> (event class)
      * @param handlers registry resolves event class to a list of handlers
      * @param constructor function to create new aggregate instance for a given id
      */
     public AggregatePipeline(
             Class<A> clazz,
-            EventStore store,
+            EventDispatcher dispatcher,
             Map<String, Class<?>> eventTypes,
             DomainHandlerRegistry<A> handlers,
             Function<String, A> constructor
     ) {
         origin = clazz.getAnnotation(Origin.class).value();
-        this.store = store;
+        this.dispatcher = dispatcher;
         this.handlers = handlers;
         this.index = eventTypes;
         this.constructor = constructor;
@@ -54,45 +48,33 @@ public class AggregatePipeline<A extends Aggregate> {
 
 
     public <T> Event push(String aggregateId, T event) {
-        return store(event, aggregateId);
+        return dispatcher.store(origin, aggregateId, event);
     }
 
     public A get(String id) {
         A aggregate = objects.computeIfAbsent(id, constructor);
         AtomicLong last = aggregate.getLastEvent();
         long seq = last.get();
-        Stream<Event> events = store.getEvents(origin, id, seq);
+        Stream<EventMeta<?>> events = dispatcher.getEvents(origin, id, seq, index);
 
-        for (Iterator<Event> it = events.iterator(); it.hasNext(); ) {
-            Event event = it.next();
-            process(event, aggregate);
-            last.set(event.getSeq());
+        for (Iterator<EventMeta<?>> it = events.iterator(); it.hasNext(); ) {
+            EventMeta<?> event = it.next();
+            handle(aggregate, event.getMeta(), event.getPayload());
+            last.set(event.getMeta().getSeq());
         }
         return aggregate;
     }
 
     protected <T> Event store(T event, String aggregateId) {
-        String type = PayloadUtils.eventType(event.getClass()).value();
-        String json = gson.toJson(event);
-        return store.persist(origin, aggregateId, type, json);
+        return dispatcher.store(origin, aggregateId, event);
     }
 
-    private void process(Event event, A aggregate) {
-        String type = event.getType();
-        Class<?> clazz = index.get(type);
-        if (clazz == null) {
-            log.error("Event #{} [{}->{}] ignored: [{}]", event.getId(), origin, type, UNKNOWN_TYPE);
-            String knownTypes = index.keySet().stream().collect(Collectors.joining(","));
-            log.warn("Known types for [{}] are:\n{}", origin, knownTypes);
-        } else {
-            handle(event, clazz, aggregate);
-        }
-    }
-
-    private <T> void handle(Event event, Class<T> type, A object) {
+    private <T> void handle(A object, Event event, T payload) {
+        // Here we rely that deserializer in dispatcher produces plain objects, not some crazy reflection / asm stuff
+        // TODO This is not the greatest assumption to make, we need to reconsider the approach here 
+        Class<T> type = (Class<T>) payload.getClass();
         String id = event.getId();
         log.debug("Handling {} [{}/{}]", id, event.getType(), event.getAggregateId());
-        T payload = gson.fromJson(event.getPayload(), type);
         StreamUtils.fold(handlers.get(type).stream().map(
                 h -> (Function<A, A>) a -> h.apply(a, event, payload)
         )).apply(object);

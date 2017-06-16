@@ -2,6 +2,7 @@ package com.github.yafna.events.pipelines
 
 import com.github.yafna.events.Event
 import com.github.yafna.events.aggregate.EventScanner
+import com.github.yafna.events.dispatcher.GsonEventDispatcher
 import com.github.yafna.events.handlers.DomainHandlerRegistry
 import com.github.yafna.events.rabbits.Rabbit
 import com.github.yafna.events.rabbits.RabbitAdded
@@ -21,7 +22,7 @@ class AggregatePipelineSpec extends Specification {
 
     def "push"() {
         given:
-            AggregatePipeline<Rabbit> subj = new AggregatePipeline(Rabbit.class, store, index, handlers, {
+            AggregatePipeline<Rabbit> subj = new AggregatePipeline(Rabbit.class, new GsonEventDispatcher(store), index, handlers, {
                 new Rabbit(it)
             })
         when:
@@ -37,7 +38,7 @@ class AggregatePipelineSpec extends Specification {
 
     def "create and update"() {
         given:
-            AggregatePipeline<Rabbit> subj = new AggregatePipeline(Rabbit.class, store, index, handlers, {
+            AggregatePipeline<Rabbit> subj = new AggregatePipeline(Rabbit.class, new GsonEventDispatcher(store), index, handlers, {
                 new Rabbit(it)
             })
         when:
@@ -56,7 +57,7 @@ class AggregatePipelineSpec extends Specification {
 
     def "init and push"() {
         given:
-            AggregatePipeline<Rabbit> subj = new AggregatePipeline(Rabbit.class, store, index, handlers, {
+            AggregatePipeline<Rabbit> subj = new AggregatePipeline(Rabbit.class, new GsonEventDispatcher(store), index, handlers, {
                 new Rabbit(it)
             })
         when:
