@@ -2,6 +2,7 @@ package com.github.yafna.events.store.file;
 
 import com.github.yafna.events.Event;
 import com.github.yafna.events.store.EventStore;
+import com.github.yafna.events.store.ProtoEvent;
 import com.github.yafna.events.store.StoredEvent;
 import lombok.AllArgsConstructor;
 import lombok.SneakyThrows;
@@ -84,7 +85,7 @@ public class FileEventStore implements EventStore {
                     // with a limited-size collector that will only keep a limited number of first items  
                     Collectors.toList()
             ).spliterator();
-                    
+
             if (spliterator.getExactSizeIfKnown() != 0) {
                 return spliterator;
             }
@@ -108,41 +109,35 @@ public class FileEventStore implements EventStore {
     }
 
     @Override
-    public Persister persist(String aggregateId) {
-        return fn(this::create).then(
-                ev -> ev.setAggregateId(aggregateId)
-        ).then(this::write);
-    }
-
-    @Override
-    public Persister persist(String causeId, String corrId, String aggregateId) {
-        return fn(this::create).then(
-                addCorrelation(causeId, corrId)
-        ).then(
-                ev -> ev.setAggregateId(aggregateId)
-        ).then(this::write);
-    }
-
-    @Override
-    public Persister persist(String causeId, String corrId) {
-        return fn(this::create).then(
-                addCorrelation(causeId, corrId)
-        ).then(this::write);
-    }
-
-    @Override
-    public Persister persist() {
-        return fn(this::create).then(this::write);
-    }
-
-    private StoredEvent create(String origin, String type, String payload) {
+    public Event persist(String origin, String aggregateId, String type, String payload) {
         StoredEvent event = new StoredEvent();
-        event.setId(generateId());
+        event.setAggregateId(aggregateId);
         event.setOrigin(origin);
         event.setType(type);
-        event.setStored(clock.instant());
         event.setPayload(payload);
-        return event;
+        event.setId(generateId());
+        event.setStored(clock.instant());
+        return write(event);
+    }
+
+    @Override
+    public long persist(String causeId, String corrId, ProtoEvent[] events) {
+        Instant timestamp = clock.instant();
+        List<StoredEvent> stored = Stream.of(events).map(p -> {
+            StoredEvent event = new StoredEvent();
+            event.setCauseId(causeId);
+            event.setCorrId(corrId);
+            event.setAggregateId(p.getAggregateId());
+            event.setOrigin(p.getOrigin());
+            event.setType(p.getType());
+            event.setPayload(p.getPayload());
+            event.setId(generateId());
+            event.setStored(timestamp);
+            return write0(event);
+        }).collect(Collectors.toList());
+        // Have to ensure all the events are stored before calling subscribers 
+        stored.forEach(this::callSubscribers);
+        return stored.size(); 
     }
 
     private StoredEvent write(StoredEvent event) {
@@ -157,8 +152,8 @@ public class FileEventStore implements EventStore {
         ).map(
                 byType -> byType.get(stored.getType())
         ).ifPresent(
-                callbacks -> callbacks.forEach(callback -> 
-                    executor.submit(() -> callback.accept(stored))
+                callbacks -> callbacks.forEach(callback ->
+                        executor.submit(() -> callback.accept(stored))
                 )
         );
     }
@@ -243,13 +238,6 @@ public class FileEventStore implements EventStore {
         }
     }
 
-    private static Consumer<StoredEvent> addCorrelation(String causeId, String corrId) {
-        return ev -> {
-            ev.setCauseId(causeId);
-            ev.setCorrId(corrId);
-        };
-    }
-
     private static BiPredicate<Path, BasicFileAttributes> isAfter(Long seq) {
         String prefix = MessageFormat.format(PATTERN_SEQ, seq);
         return (file, attrs) -> {
@@ -268,10 +256,6 @@ public class FileEventStore implements EventStore {
                 return ((String) parse[1]).compareTo(sinceString) > 0 && Objects.equals(type, (String) parse[3]);
             }
         };
-    }
-
-    private static Persister fn(Persister create) {
-        return create;
     }
 
     private static String formatTime(Instant stored) {

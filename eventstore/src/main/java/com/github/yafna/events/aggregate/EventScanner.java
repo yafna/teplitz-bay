@@ -75,7 +75,7 @@ public class EventScanner {
                 } else {
                     // Payload only, no metadata
                     return Stream.of(new SimpleEntry<String, DomainHandler<T, ?>>(
-                            type.getAnnotation(EvType.class).value(),
+                            PayloadUtils.eventType(type).value(),
                             (object, meta, payload) -> invoke(method, object, payload)
                     ));
                 }
@@ -95,7 +95,7 @@ public class EventScanner {
     }
 
     @SneakyThrows({IllegalAccessException.class, InvocationTargetException.class})
-    public static <T> T invoke(Method method, T object, Object... args) {
+    private static <T> T invoke(Method method, T object, Object... args) {
         method.invoke(object, args);
         return object;
     }
