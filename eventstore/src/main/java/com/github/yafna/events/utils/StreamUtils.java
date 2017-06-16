@@ -11,7 +11,7 @@ public class StreamUtils {
      * 
      * @param operations operations to be merged
      * @return Unary operator that sequentally applies functions from stream.
-     * If given stream is empty, 
+     * If given stream is empty, returns identity function. 
      */
     public static <T> UnaryOperator<T> fold(Stream<Function<T, T>> operations) {
         return initial -> {
