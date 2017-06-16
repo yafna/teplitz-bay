@@ -4,16 +4,16 @@ import com.github.yafna.events.rabbits.RabbitAdded;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class AggregateUtilsTest {
+public class PayloadUtilsTest {
     private final static RabbitAdded EVENT = new RabbitAdded("Bill", "Longear") {};
 
     @Test
     public void typeNormal() {
-        Assert.assertEquals("added", AggregateUtils.eventType(RabbitAdded.class).value());
+        Assert.assertEquals("added", PayloadUtils.eventType(RabbitAdded.class).value());
     }
 
     @Test
     public void typeAnonymousl() {
-        Assert.assertEquals("added", AggregateUtils.eventType(EVENT.getClass()).value());
+        Assert.assertEquals("added", PayloadUtils.eventType(EVENT.getClass()).value());
     }
 }

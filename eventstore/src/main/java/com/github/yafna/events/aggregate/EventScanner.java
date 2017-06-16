@@ -75,7 +75,7 @@ public class EventScanner {
                 } else {
                     // Payload only, no metadata
                     return Stream.of(new SimpleEntry<String, DomainHandler<T, ?>>(
-                            AggregateUtils.eventType(type).value(),
+                            PayloadUtils.eventType(type).value(),
                             (object, meta, payload) -> invoke(method, object, payload)
                     ));
                 }

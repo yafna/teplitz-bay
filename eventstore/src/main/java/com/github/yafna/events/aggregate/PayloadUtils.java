@@ -4,7 +4,10 @@ import com.github.yafna.events.annotations.EvType;
 
 import java.lang.annotation.Annotation;
 
-public class AggregateUtils {
+/**
+ * Groups methods to deduce things from event payload.
+ */
+public class PayloadUtils {
 
     /**
      * Resolves event type from payload class.

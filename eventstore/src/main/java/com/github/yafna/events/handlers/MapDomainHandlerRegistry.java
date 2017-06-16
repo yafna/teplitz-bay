@@ -1,6 +1,6 @@
 package com.github.yafna.events.handlers;
 
-import com.github.yafna.events.aggregate.AggregateUtils;
+import com.github.yafna.events.aggregate.PayloadUtils;
 import lombok.AllArgsConstructor;
 
 import java.util.List;
@@ -17,6 +17,6 @@ public class MapDomainHandlerRegistry<A> implements DomainHandlerRegistry<A> {
     @SuppressWarnings("unchecked")
     @Override
     public <T> List<DomainHandler<A, T>> get(Class<T> clazz) {
-        return (List<DomainHandler<A, T>>) (Object) handlers.get(AggregateUtils.eventType(clazz).value());
+        return (List<DomainHandler<A, T>>) (Object) handlers.get(PayloadUtils.eventType(clazz).value());
     }
 }
