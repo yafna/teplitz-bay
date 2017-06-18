@@ -17,7 +17,6 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Collectors
 import java.util.stream.StreamSupport
@@ -168,12 +167,10 @@ public class GsonFileEventStoreSpec extends Specification {
             callbacks.get() == 0
         when: "new 'wake' event is persisted then callback is invoked"
             subj.persist(origin, "miles", "wake", null)
-            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
         then: "callback is invoked"
             callbacks.get() == 1
         when: "new 'born' event is persisted then callback is invoked" 
             subj.persist(origin, "sonic", "born", null)
-            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
         then: "callback is not invoked"
             callbacks.get() == 1
     }
@@ -190,7 +187,6 @@ public class GsonFileEventStoreSpec extends Specification {
             def events = StreamSupport.stream(spliterator1, false).collect(Collectors.toList()).collect({ it.getAggregateId() })
         then: "returned spliterator is null"
             events == ["amy"]
-            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
             callbacks.get() == 0
         when: "subscribe to 'wake'"
             def spliterator2 = subj.subscribe(origin, "wake", TestClock.instant(date, "05:30"), { callbacks.incrementAndGet() })
@@ -198,12 +194,10 @@ public class GsonFileEventStoreSpec extends Specification {
             spliterator2 == null
         when: "new 'wake' event is persisted then callback is invoked"
             subj.persist(origin, "miles", "wake", null)
-            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
         then: "callback is invoked"
             callbacks.get() == 1
         when: "new 'born' event is persisted then callback is invoked"
             subj.persist(origin, "sonic", "born", null)
-            subj.executor.awaitQuiescence(10, TimeUnit.SECONDS)
         then: "callback is not invoked"
             callbacks.get() == 1
     }
